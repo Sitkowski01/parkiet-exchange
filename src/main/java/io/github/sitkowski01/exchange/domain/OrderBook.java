@@ -65,6 +65,11 @@ public final class OrderBook {
         return Optional.of(new OrderCancelled(orderId, order.remaining, OrderCancelled.Reason.REQUESTED));
     }
 
+    /** Id ostatniego przyjetego zlecenia; nastepne musi byc wieksze. 0, gdy jeszcze zadnego nie bylo. */
+    public long lastOrderId() {
+        return lastOrderId;
+    }
+
     public OptionalLong bestBid() {
         return bids.isEmpty() ? OptionalLong.empty() : OptionalLong.of(bids.firstKey());
     }

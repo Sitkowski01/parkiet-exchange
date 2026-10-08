@@ -107,6 +107,14 @@ class LimitOrderMatchingTest {
     }
 
     @Test
+    void remembersLastAcceptedId() {
+        assertThat(book.lastOrderId()).isZero();
+        book.submit(limit(7, BUY, 100, 1));
+
+        assertThat(book.lastOrderId()).isEqualTo(7);
+    }
+
+    @Test
     void rejectsOrderIdThatDoesNotIncrease() {
         book.submit(limit(5, BUY, 100, 1));
 
