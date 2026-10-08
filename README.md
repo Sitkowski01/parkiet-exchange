@@ -15,8 +15,8 @@ nie ich odbiorcą.
 |---|---|---|
 | 1 | Szkielet, CI, narzędzia testowe, limit rozmiaru commita | ✅ |
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
-| 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ⏳ |
-| 4 | REST API, PostgreSQL, Flyway, Testcontainers | |
+| 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
+| 4 | REST API, PostgreSQL, Flyway, Testcontainers | ⏳ |
 | 5 | Transactional outbox → Kafka | |
 | 6 | Notowania na żywo przez WebSocket | |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
@@ -45,6 +45,26 @@ nie ich odbiorcą.
 Kod: [`domain/OrderBook.java`](src/main/java/io/github/sitkowski01/exchange/domain/OrderBook.java).
 Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 
+## Silnik
+
+```
+ wątki HTTP ──┐
+ wątki HTTP ──┼──► [ kolejka CDR ] ──► wątek engine-CDR ──► arkusz CDR ──► EventSink
+ boty ────────┘     (ograniczona)       (jedyny, który        │
+                                         go dotyka)           └──► odpowiedź (CompletableFuture)
+              ───► [ kolejka PKO ] ──► wątek engine-PKO ──► arkusz PKO
+```
+
+- **Jeden wątek na instrument.** Arkusz dotyka tylko on, więc kojarzenie nie potrzebuje
+  żadnych blokad, a kolejność jest jednoznaczna. Ten sam model stoi za LMAX Disruptor.
+- **Id zleceń nadaje wątek silnika**, nie wołający — inaczej dwa równoległe żądania
+  mogłyby wejść do kolejki w innej kolejności niż numeracja.
+- **Ograniczona kolejka = backpressure.** Pełna kolejka odrzuca polecenie od razu,
+  zamiast rosnąć w pamięci, aż serwer padnie.
+- **Zdarzenia mają numer kolejny bez dziur** — odbiorca od razu widzi, że coś zgubił.
+- **Zamykanie** kończy wszystkie przyjęte polecenia; jest odporne na przerwania wątku
+  i odmawia wywołania z wątku silnika, które czekałoby na samo siebie.
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -52,8 +72,10 @@ Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 | Jednostkowe | każda reguła kojarzenia osobno: cena, czas, częściowe realizacje, anulowanie |
 | **Różnicowe** | 30 000 losowych zleceń; arkusz musi dać **identyczne zdarzenia** jak celowo naiwna implementacja-wyrocznia |
 | Niezmienniki | po każdym kroku: arkusz się nie krzyżuje, żadna akcja nie znika ani nie powstaje |
-| Architektury | domena nie zależy od niczego poza JDK |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny i sprawdza, czy testy to zauważą. Próg: 85% |
+| **Współbieżności** | 8 wątków × 2000 poleceń naraz; potem cały przebieg odtworzony jednowątkowo z dziennika zdarzeń musi dać identyczny wynik |
+| Cyklu życia | pełna kolejka, zamykanie w trakcie pracy, przerwania, błędy odbiorcy zdarzeń |
+| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny i silnika i sprawdza, czy testy to zauważą. Wynik: 103/104, próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo)
