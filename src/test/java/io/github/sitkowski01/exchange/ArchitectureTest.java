@@ -1,0 +1,27 @@
+package io.github.sitkowski01.exchange;
+
+import com.tngtech.archunit.core.domain.JavaClasses;
+import com.tngtech.archunit.core.importer.ClassFileImporter;
+import com.tngtech.archunit.core.importer.ImportOption;
+import org.junit.jupiter.api.Test;
+
+import static com.tngtech.archunit.lang.syntax.ArchRuleDefinition.classes;
+
+/**
+ * Reguly architektury jako test: zlamanie ich wywraca build, a nie czeka na review.
+ */
+class ArchitectureTest {
+
+    private static final JavaClasses PRODUCTION = new ClassFileImporter()
+            .withImportOption(ImportOption.Predefined.DO_NOT_INCLUDE_TESTS)
+            .importPackages("io.github.sitkowski01.exchange");
+
+    @Test
+    void domainDependsOnlyOnJdk() {
+        classes().that().resideInAPackage("..exchange.domain..")
+                .should().onlyDependOnClassesThat().resideInAnyPackage("..exchange.domain..", "java..")
+                .because("silnik kojarzenia ma byc czysta Java: bez Springa, bazy i sieci, "
+                        + "zeby dalo sie go testowac w milisekundach i przeniesc gdziekolwiek")
+                .check(PRODUCTION);
+    }
+}
