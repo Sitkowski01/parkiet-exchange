@@ -100,19 +100,42 @@ public final class InstrumentEngine implements AutoCloseable {
 
     /**
      * Przestaje przyjmowac polecenia, wykonuje te, ktore juz czekaja, i czeka na koniec watku.
+     * Kazde wywolanie -- takze drugie, rownolegle -- wraca dopiero, gdy watek sie skonczyl.
+     *
+     * <p>Przerwanie (interrupt) wolajacego nie skraca zamykania: STOP musi trafic do kolejki,
+     * inaczej watek silnika zylby dalej, nie przyjmujac juz niczego. Flaga przerwania jest
+     * przywracana na koniec, zeby wolajacy wiedzial, ze ktos go przerwal.
+     *
+     * @throws IllegalStateException wywolane z watku silnika (np. z {@link EventSink}) --
+     *                               czekalby na samego siebie
      */
     @Override
     public void close() {
+        if (Thread.currentThread() == thread) {
+            throw new IllegalStateException(symbol + ": close() called from the engine thread would deadlock");
+        }
+        boolean first;
         synchronized (lifecycle) {
-            if (!accepting) {
-                return;
-            }
+            first = accepting;
             accepting = false;
         }
-        try {
-            queue.put(STOP);
-            thread.join();
-        } catch (InterruptedException e) {
+        boolean interrupted = false;
+        while (first) {
+            try {
+                queue.put(STOP);
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        while (thread.isAlive()) {
+            try {
+                thread.join();
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted) {
             Thread.currentThread().interrupt();
         }
     }

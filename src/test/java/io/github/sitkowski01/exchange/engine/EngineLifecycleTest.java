@@ -79,6 +79,62 @@ class EngineLifecycleTest {
     }
 
     @Test
+    void everyConcurrentCloseWaitsForEngineToFinish() throws Exception {
+        startBlockedEngine(8);
+        CompletableFuture<OrderResult> queued = engine.place(BUY, LIMIT, 100, 1);
+
+        Thread first = Thread.ofPlatform().start(engine::close);
+        awaitClosing();
+        Thread second = Thread.ofPlatform().start(engine::close);
+        second.join(200);
+
+        assertThat(second.isAlive()).as("second close() returned while engine still busy").isTrue();
+        release.countDown();
+        first.join(5_000);
+        second.join(5_000);
+        assertThat(queued).isCompleted();
+    }
+
+    @Test
+    void interruptedCallerStillClosesEngineCompletely() throws Exception {
+        startBlockedEngine(8);
+        CompletableFuture<OrderResult> queued = engine.place(BUY, LIMIT, 100, 1);
+        CompletableFuture<Boolean> interruptFlagAfterClose = new CompletableFuture<>();
+
+        Thread closer = Thread.ofPlatform().start(() -> {
+            Thread.currentThread().interrupt();
+            engine.close();
+            interruptFlagAfterClose.complete(Thread.currentThread().isInterrupted());
+        });
+        awaitClosing();
+        release.countDown();
+        closer.join(5_000);
+
+        assertThat(interruptFlagAfterClose).isCompletedWithValue(true);
+        assertThat(queued).isCompleted().isNotCompletedExceptionally();
+    }
+
+    @Test
+    void closeFromEngineThreadIsRefusedInsteadOfDeadlocking() {
+        CompletableFuture<Throwable> closeAttempt = new CompletableFuture<>();
+        InstrumentEngine[] self = new InstrumentEngine[1];
+        engine = InstrumentEngine.start("CDR", 4, Clock.systemUTC(), batch -> {
+            try {
+                self[0].close();
+                closeAttempt.complete(null);
+            } catch (Throwable e) {
+                closeAttempt.complete(e);
+            }
+        });
+        self[0] = engine;
+
+        engine.place(BUY, LIMIT, 100, 1).join();
+
+        assertThat(closeAttempt.join()).isInstanceOf(IllegalStateException.class);
+        assertThat(engine.isAccepting()).isTrue();
+    }
+
+    @Test
     void errorInSinkDoesNotKillEngine() {
         engine = InstrumentEngine.start("CDR", 4, Clock.systemUTC(), batch -> {
             throw new AssertionError("sink bug");
