@@ -47,10 +47,12 @@ tasks.jacocoTestReport {
 pitest {
 	junit5PluginVersion = "1.2.3"
 	pitestVersion = "1.30.0"
-	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*")
-	targetTests = setOf("io.github.sitkowski01.exchange.domain.*")
+	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*")
+	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*")
 	threads = 4
 	outputFormats = setOf("HTML", "XML")
 	timestampedReports = false
 	mutationThreshold = 85
+	// Usuniecie logowania to mutant, ktorego zaden rozsadny test nie zabije.
+	avoidCallsTo = setOf("java.lang.System\$Logger")
 }
