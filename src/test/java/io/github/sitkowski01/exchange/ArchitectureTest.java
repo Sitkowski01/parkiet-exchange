@@ -17,6 +17,15 @@ class ArchitectureTest {
             .importPackages("io.github.sitkowski01.exchange");
 
     @Test
+    void engineDependsOnlyOnDomainAndJdk() {
+        classes().that().resideInAPackage("..exchange.engine..")
+                .should().onlyDependOnClassesThat()
+                .resideInAnyPackage("..exchange.engine..", "..exchange.domain..", "java..")
+                .because("silnik to tez czysta Java -- Spring tylko go sklada i wystawia na zewnatrz")
+                .check(PRODUCTION);
+    }
+
+    @Test
     void domainDependsOnlyOnJdk() {
         classes().that().resideInAPackage("..exchange.domain..")
                 .should().onlyDependOnClassesThat().resideInAnyPackage("..exchange.domain..", "java..")
