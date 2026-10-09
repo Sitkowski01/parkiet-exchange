@@ -1,0 +1,4 @@
+# Gielda z ruchem: boty kwotuja i handluja wszystkimi spolkami od ich cen z GPW.
+exchange:
+  bots:
+    enabled: true

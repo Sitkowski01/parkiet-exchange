@@ -60,9 +60,9 @@ pitest {
 	junit5PluginVersion = "1.2.3"
 	pitestVersion = "1.30.0"
 	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*",
-		"io.github.sitkowski01.exchange.marketdata.*")
+		"io.github.sitkowski01.exchange.marketdata.*", "io.github.sitkowski01.exchange.bots.*")
 	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*",
-		"io.github.sitkowski01.exchange.marketdata.*")
+		"io.github.sitkowski01.exchange.marketdata.*", "io.github.sitkowski01.exchange.bots.*")
 	// Klasy *Config tylko skladaja beany -- sprawdza je test calej aplikacji, nie PIT.
 	excludedClasses = setOf("*Config", "*Config$*")
 	threads = 4

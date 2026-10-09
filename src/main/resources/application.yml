@@ -62,3 +62,20 @@ exchange:
     # Paczki zdarzen czekajace na hub. Pelna kolejka = notowania gubia paczke (handel nie czeka).
     hub-queue: 10000
     max-clients: 1000
+  bots:
+    # Wlaczane profilem demo: ./gradlew bootRun --args='--spring.profiles.active=demo'
+    enabled: false
+    tick-interval: 200ms
+    volatility: 0.001
+    spread-bps: 20
+    maker-quantity: 50
+    noise-probability: 0.6
+    price-source-url: https://query1.finance.yahoo.com
+    # Gdy zrodlo rynkowe nie odpowie (zlotowki, mniej wiecej kursy z pazdziernika 2026).
+    fallback-prices:
+      CDR: 263.00
+      PKO: 113.94
+      PKN: 159.34
+      PZU: 71.76
+      KGH: 347.00
+      ALE: 51.75
