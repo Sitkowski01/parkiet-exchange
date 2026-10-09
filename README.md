@@ -17,7 +17,7 @@ nie ich odbiorcą.
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
 | 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
-| 5 | Transactional outbox → Kafka | |
+| 5 | Zapis poza wątkiem silnika ✅, transactional outbox → Kafka | ⏳ |
 | 6 | Notowania na żywo przez WebSocket | |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
 | 8 | Odtwarzanie arkusza z logu zdarzeń, metryki, benchmarki | |
@@ -113,7 +113,10 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 - **`run_id`** — każde uruchomienie giełdy numeruje zdarzenia od 1, więc restart nie zderza się z kluczem.
 - **Schemat pilnuje kształtu wiersza** (`CHECK`): transakcja musi mieć makera i takera,
   anulowanie nie ma ceny. Migracje: Flyway ([`db/migration`](src/main/resources/db/migration)).
-- Zapis idzie z wątku silnika (~1 ms na polecenie). Przeniesienie go poza wątek to outbox w etapie 5.
+- **Zapis poza wątkiem silnika.** Silnik wrzuca zdarzenia do kolejki i wraca do kojarzenia;
+  wątek `event-writer` zapisuje wszystko, co się nazbierało, jedną transakcją (group commit).
+- **Baza leży → giełda staje, ale nic nie ginie.** Zapis jest ponawiany do skutku; gdy kolejka
+  się zapełni, silnik czeka (backpressure). Insert jest idempotentny, więc ponowienie nie dubluje.
 
 ## Testy
 
@@ -123,11 +126,12 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 | **Różnicowe** | 30 000 losowych zleceń; arkusz musi dać **identyczne zdarzenia** jak celowo naiwna implementacja-wyrocznia |
 | Niezmienniki | po każdym kroku: arkusz się nie krzyżuje, żadna akcja nie znika ani nie powstaje |
 | **Współbieżności** | 8 wątków × 2000 poleceń naraz; potem cały przebieg odtworzony jednowątkowo z dziennika zdarzeń musi dać identyczny wynik |
+| Zapisu asynchronicznego | kolejność, sklejanie paczek, ponawianie z rosnącą przerwą, backpressure, zamykanie z martwą bazą w limicie czasu |
 | Cyklu życia | pełna kolejka, zamykanie w trakcie pracy, przerwania, błędy odbiorcy zdarzeń |
 | HTTP | MockMvc na prawdziwym silniku: pełne odpowiedzi JSON, 400/404, zablokowany silnik → 504, pełna kolejka → 503 |
 | **Integracyjne** | prawdziwy PostgreSQL w Dockerze (Testcontainers): zapis każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API i baza nie znają się nawzajem |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 126/127, próg 85% |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 156/163 (ocalałe to mutanty równoważne i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
