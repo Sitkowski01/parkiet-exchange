@@ -1,11 +1,9 @@
 package io.github.sitkowski01.exchange.persistence;
 
+import io.github.sitkowski01.exchange.config.EngineSink;
 import io.github.sitkowski01.exchange.engine.AsyncEventSink;
-import org.springframework.context.ApplicationListener;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -13,7 +11,7 @@ import java.time.Duration;
 
 /**
  * Podpina zapis do bazy jako odbiorce zdarzen silnika ({@code EventSink}). EngineConfig bierze go
- * przez {@code Optional<EventSink>} i nie wie, ze za nim stoi PostgreSQL.
+ * (razem z innymi {@link EngineSink}) i nie wie, ze za nim stoi PostgreSQL.
  *
  * <pre>
  * silnik ──► AsyncEventSink (kolejka, watek event-writer) ──► JdbcEventSink ──► engine_event
@@ -35,20 +33,10 @@ class PersistenceConfig {
         return JdbcEventSink.startRun(jdbc, tx);
     }
 
-    /** {@code @Primary}: to ten odbiorca trafia do silnika, a nie {@link JdbcEventSink} bezposrednio. */
+    /** {@link EngineSink}: do silnika trafia ten odbiorca, a nie {@link JdbcEventSink} bezposrednio. */
     @Bean(destroyMethod = "close")
-    @Primary
+    @EngineSink
     AsyncEventSink eventSink(JdbcEventSink journal) {
         return AsyncEventSink.start(journal, QUEUE_CAPACITY, RETRY_BACKOFF, CLOSE_TIMEOUT);
-    }
-
-    /**
-     * Zegar zamykania rusza, zanim Spring zacznie zamykac beany. Silnik zamyka sie przed
-     * odbiorca, a jego watek moze wisiec w {@code publish} na pelnej kolejce -- bez tego
-     * zegara martwa baza zablokowalaby wylaczenie aplikacji na zawsze.
-     */
-    @Bean
-    ApplicationListener<ContextClosedEvent> eventWriterShutdownClock(AsyncEventSink eventSink) {
-        return event -> eventSink.beginShutdown();
     }
 }
