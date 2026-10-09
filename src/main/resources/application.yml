@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: mini-exchange
+  threads:
+    # Watek zadania czeka na odpowiedz silnika (join). Watki wirtualne czekaja prawie za darmo,
+    # wiec tysiac oczekujacych zadan nie zjada tysiaca watkow systemowych.
+    virtual:
+      enabled: true
+  jackson:
+    # Domyslnie Jackson jest poblazliwy: "quantity": 10.9 obcialby do 10, a "side": 1
+    # zamienil na SELL (indeks w enumie). Na gieldzie wolimy 400 niz zgadywanie.
+    deserialization:
+      accept-float-as-int: false
+    datatype:
+      enum:
+        fail-on-numbers-for-enums: true
+
+exchange:
+  # Spolki z GPW. Kazda dostaje wlasny watek silnika i wlasna kolejke.
+  symbols: [CDR, PKO, PKN, PZU, KGH, ALE]
+  queue-capacity: 10000
+  request-timeout: 5s
