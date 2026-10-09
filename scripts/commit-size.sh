@@ -14,6 +14,6 @@ done < <(git diff --cached --numstat)
 
 printf -- '-----\n%5d  razem (limit %d)\n' "$total" "$LIMIT"
 if (( total > LIMIT )); then
-  echo "Commit za duzy — podziel go (skill etap, krok 3)." >&2
+  echo "Commit za duzy — podziel go na mniejsze." >&2
   exit 1
 fi
