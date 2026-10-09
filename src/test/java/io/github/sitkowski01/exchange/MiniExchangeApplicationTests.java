@@ -32,7 +32,7 @@ import static org.awaitility.Awaitility.await;
  * Cala aplikacja naraz: HTTP → silnik → PostgreSQL → Kafka (Flyway, Testcontainers).
  * Sprawdza, ze kawalki sa dobrze polaczone, a nie kazda regule z osobna -- to robia testy nizej.
  */
-@SpringBootTest
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
 @Import({TestcontainersConfiguration.class, KafkaContainerConfiguration.class})
 class MiniExchangeApplicationTests {
@@ -80,8 +80,10 @@ class MiniExchangeApplicationTests {
      * zapisem, inaczej zdarzenia ostatnich polecen nie mialyby dokad trafic.
      */
     @Test
-    void engineShutsDownBeforeEventWriter() {
-        assertThat(context.getBeanFactory().getDependenciesForBean("matchingEngine")).contains("eventSink");
+    void engineShutsDownBeforeItsSinks() {
+        assertThat(context.getBeanFactory().getDependenciesForBean("matchingEngine"))
+                .contains("eventSink", "marketDataHub")
+                .doesNotContain("journal");
     }
 
     private Number place(String symbol, String body) throws Exception {

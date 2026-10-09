@@ -53,3 +53,12 @@ exchange:
     batch-size: 500
     # Dluzej niz delivery.timeout.ms producenta: to producent ma zglosic blad, nie my.
     send-timeout: 15s
+  market-data:
+    # Obraz arkusza spolki najwyzej co tyle (tylko gdy sie zmienil). Transakcje ida od razu.
+    book-interval: 100ms
+    book-levels: 10
+    # Tyle wiadomosci moze czekac na klienta; wiecej = klient nie nadaza i jest rozlaczany.
+    client-queue: 1000
+    # Paczki zdarzen czekajace na hub. Pelna kolejka = notowania gubia paczke (handel nie czeka).
+    hub-queue: 10000
+    max-clients: 1000
