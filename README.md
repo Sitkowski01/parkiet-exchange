@@ -16,7 +16,7 @@ nie ich odbiorcą.
 | 1 | Szkielet, CI, narzędzia testowe, limit rozmiaru commita | ✅ |
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
-| 4 | REST API ✅, PostgreSQL, Flyway, Testcontainers | ⏳ |
+| 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
 | 5 | Transactional outbox → Kafka | |
 | 6 | Notowania na żywo przez WebSocket | |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
@@ -68,7 +68,7 @@ Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 ## REST API
 
 ```bash
-./gradlew bootRun
+./gradlew bootRun     # potrzebny Docker: sam podnosi Postgresa z compose.yaml
 
 curl localhost:8080/api/instruments
 # ["CDR","PKO","PKN","PZU","KGH","ALE"]
@@ -97,6 +97,24 @@ Błędy w formacie RFC 9457 (`application/problem+json`). Ceny w JSON-ie to teks
 (`"250.40"`), żeby klient w JS nie zgubił groszy w `double`. Spółki, pojemność kolejki
 i limit czasu: [`application.yml`](src/main/resources/application.yml).
 
+## Dziennik zdarzeń w PostgreSQL
+
+Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w jakiej powstało:
+
+```
+ run_id | symbol | sequence |  type     | side | price | quantity | reason
+--------+--------+----------+-----------+------+-------+----------+-----------
+      1 | PKO    |        1 | RESTED    | SELL |  6410 |      100 |
+      1 | PKO    |        2 | TRADE     | BUY  |  6410 |       30 |
+      1 | PKO    |        3 | CANCELLED |      |       |       70 | REQUESTED
+```
+
+- **Paczka zdarzeń jednego zlecenia w jednej transakcji** — nigdy pół zlecenia w bazie.
+- **`run_id`** — każde uruchomienie giełdy numeruje zdarzenia od 1, więc restart nie zderza się z kluczem.
+- **Schemat pilnuje kształtu wiersza** (`CHECK`): transakcja musi mieć makera i takera,
+  anulowanie nie ma ceny. Migracje: Flyway ([`db/migration`](src/main/resources/db/migration)).
+- Zapis idzie z wątku silnika (~1 ms na polecenie). Przeniesienie go poza wątek to outbox w etapie 5.
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -107,11 +125,12 @@ i limit czasu: [`application.yml`](src/main/resources/application.yml).
 | **Współbieżności** | 8 wątków × 2000 poleceń naraz; potem cały przebieg odtworzony jednowątkowo z dziennika zdarzeń musi dać identyczny wynik |
 | Cyklu życia | pełna kolejka, zamykanie w trakcie pracy, przerwania, błędy odbiorcy zdarzeń |
 | HTTP | MockMvc na prawdziwym silniku: pełne odpowiedzi JSON, 400/404, zablokowany silnik → 504, pełna kolejka → 503 |
-| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK |
+| **Integracyjne** | prawdziwy PostgreSQL w Dockerze (Testcontainers): zapis każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza |
+| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API i baza nie znają się nawzajem |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 126/127, próg 85% |
 
 ```bash
-./gradlew check     # testy + architektura + pokrycie (JaCoCo)
+./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
 ./gradlew pitest    # testy mutacyjne -> build/reports/pitest
 ```
 
