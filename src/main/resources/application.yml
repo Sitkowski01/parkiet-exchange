@@ -13,12 +13,12 @@ spring:
     username: exchange
     password: exchange
     hikari:
-      # Zapis zdarzen idzie z watku silnika. Gdy baza lezy, lepiej szybko zalogowac blad,
-      # niz zatrzymac instrument na domyslne 30 s czekania na polaczenie.
+      # Watek event-writer ponawia zapis, gdy baza lezy. Krotki limit = szybciej wie, ze
+      # trzeba ponowic, i nie przetrzymuje zamykania aplikacji (domyslnie 30 s).
       connection-timeout: 2000 # ms; Hikari nie rozumie zapisu "2s"
       data-source-properties:
         # Polaczenie juz wziete, a baza zawisla w polowie zapytania: bez limitu sterownik
-        # czekalby w nieskonczonosc razem z watkiem silnika. W sekundach.
+        # czekalby w nieskonczonosc, a za watkiem event-writer stanelaby cala gielda. W sekundach.
         socketTimeout: 5
   jackson:
     # Domyslnie Jackson jest poblazliwy: "quantity": 10.9 obcialby do 10, a "side": 1
