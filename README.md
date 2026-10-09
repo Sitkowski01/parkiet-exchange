@@ -18,7 +18,7 @@ nie ich odbiorcą.
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
 | 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
 | 5 | Zapis poza wątkiem silnika, transactional outbox → Kafka | ✅ |
-| 6 | Notowania na żywo przez WebSocket | |
+| 6 | Notowania na żywo przez WebSocket | ✅ |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
 | 8 | Odtwarzanie arkusza z logu zdarzeń, metryki, benchmarki | |
 
@@ -149,6 +149,33 @@ Kontrakt wiadomości (JSON, ceny w groszach):
 | `TRADE` | `makerOrderId`, `takerOrderId`, `takerSide`, `price`, `quantity` |
 | `CANCELLED` | `orderId`, `quantity`, `reason` (`REQUESTED` / `NO_LIQUIDITY`) |
 
+## Notowania na żywo (WebSocket)
+
+```
+ws://localhost:8080/ws/market?symbols=CDR,PKO
+```
+
+```json
+{"type":"book","symbol":"CDR","sequence":41,"bids":[{"price":"250.30","quantity":12,"orders":2}],"asks":[...]}
+{"type":"trade","symbol":"CDR","sequence":42,"timestamp":"2026-10-09T14:03:11.512Z","price":"250.40","quantity":4,"takerSide":"BUY"}
+```
+
+- Po podłączeniu klient dostaje **obraz arkusza** każdej spółki, potem **transakcje na bieżąco**
+  i nowy obraz najwyżej co 100 ms, gdy arkusz się zmienił (conflation: przy 1000 zmian/s
+  to 10 obrazów, zawsze najnowszy).
+- **Zszywanie po `sequence`:** obraz uwzględnia wszystko do swojego numeru. Klient odrzuca
+  transakcje o `sequence` ≤ ostatniego obrazu i obrazy starsze niż ostatni.
+- **Notowania są stratne, dziennik nie.** Silnik nigdy nie czeka na notowania: gdy nie nadążają,
+  paczka przepada, a spółka dostaje świeży obraz. Dziura w `sequence` transakcji = poczekaj na obraz.
+- **Wolny klient nie spowalnia innych.** Każde połączenie ma własną kolejkę i wątek wirtualny;
+  klient, który nie czyta, jest rozłączany (`1008 too slow`) i po ponownym połączeniu dostaje świeży obraz.
+
+| Zamknięcie | Kiedy |
+|---|---|
+| `1008 unknown or missing symbols` | brak `symbols` albo nieznana spółka |
+| `1008 too slow, reconnect` | kolejka klienta pełna |
+| `1013 too many clients` | przekroczony limit połączeń |
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -162,8 +189,9 @@ Kontrakt wiadomości (JSON, ceny w groszach):
 | HTTP | MockMvc na prawdziwym silniku: pełne odpowiedzi JSON, 400/404, zablokowany silnik → 504, pełna kolejka → 503 |
 | **Integracyjne** | prawdziwy PostgreSQL i Kafka w Dockerze (Testcontainers): zapis i odczyt każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza → Kafka |
 | Outboxa | kolejność i format wiadomości, awaria brokera w połowie paczki, brak potwierdzeń, wolny broker w limicie czasu, drugi relay nie wysyła równolegle |
+| Notowań | wolny klient rozłączany bez blokowania innych, pełna kolejka huba gubi paczkę zamiast zatrzymać silnik, obraz arkusza tylko dla spółek z widzami, limit klientów; plus prawdziwe gniazdo: obraz → transakcja → nowy obraz |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API nie zna bazy ani brokera |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 156/163 (ocalałe to mutanty równoważne i logowanie), próg 85% |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API i notowań i sprawdza, czy testy to zauważą. Wynik: 228/243 (ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
