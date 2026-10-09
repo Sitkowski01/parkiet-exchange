@@ -23,6 +23,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-actuator")
 	implementation("org.springframework.boot:spring-boot-starter-validation")
 	implementation("org.springframework.boot:spring-boot-starter-webmvc")
+	implementation("org.springframework.boot:spring-boot-starter-websocket")
 	implementation("org.springframework.boot:spring-boot-starter-jdbc")
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.flywaydb:flyway-database-postgresql")
@@ -58,8 +59,12 @@ tasks.jacocoTestReport {
 pitest {
 	junit5PluginVersion = "1.2.3"
 	pitestVersion = "1.30.0"
-	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*")
-	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*")
+	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*",
+		"io.github.sitkowski01.exchange.marketdata.*")
+	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*",
+		"io.github.sitkowski01.exchange.marketdata.*")
+	// Klasy *Config tylko skladaja beany -- sprawdza je test calej aplikacji, nie PIT.
+	excludedClasses = setOf("*Config", "*Config$*")
 	threads = 4
 	outputFormats = setOf("HTML", "XML")
 	timestampedReports = false
