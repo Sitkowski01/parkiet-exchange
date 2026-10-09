@@ -6,7 +6,7 @@ import java.util.List;
  * Odbiorca zdarzen silnika: pozniej outbox w bazie, Kafka, WebSocket.
  *
  * <p>Wywolywany z watku silnika, raz na polecenie, z cala paczka zdarzen tego polecenia.
- * Musi byc szybki -- dopoki nie wroci, instrument stoi.
+ * Musi byc szybki -- dopoki nie wroci, instrument stoi. Wolnego odbiorce owin w {@link AsyncEventSink}.
  */
 @FunctionalInterface
 public interface EventSink {

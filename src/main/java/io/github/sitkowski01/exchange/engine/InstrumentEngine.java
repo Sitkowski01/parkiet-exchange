@@ -196,8 +196,8 @@ public final class InstrumentEngine implements AutoCloseable {
         try {
             sink.publish(batch);
         } catch (Throwable e) {
-            // Arkusz juz sie zmienil i tego nie cofniemy. Trwalosc zdarzen zapewni
-            // dopiero outbox (etap 5); do tego czasu blad odbiorcy nie zatrzymuje gieldy.
+            // Arkusz juz sie zmienil i tego nie cofniemy. Odbiorca z baza (AsyncEventSink) nie rzuca,
+            // tylko czeka (backpressure); tu trafia blad dopiero przy zamykaniu albo z innego odbiorcy.
             LOG.log(System.Logger.Level.ERROR, symbol + ": event sink failed at sequence " + sequence, e);
         }
     }
