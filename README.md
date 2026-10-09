@@ -17,7 +17,7 @@ nie ich odbiorcą.
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
 | 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
-| 5 | Zapis poza wątkiem silnika ✅, transactional outbox → Kafka | ⏳ |
+| 5 | Zapis poza wątkiem silnika, transactional outbox → Kafka | ✅ |
 | 6 | Notowania na żywo przez WebSocket | |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
 | 8 | Odtwarzanie arkusza z logu zdarzeń, metryki, benchmarki | |
@@ -68,7 +68,7 @@ Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 ## REST API
 
 ```bash
-./gradlew bootRun     # potrzebny Docker: sam podnosi Postgresa z compose.yaml
+./gradlew bootRun     # potrzebny Docker: sam podnosi Postgresa i Kafkę z compose.yaml
 
 curl localhost:8080/api/instruments
 # ["CDR","PKO","PKN","PZU","KGH","ALE"]
@@ -118,6 +118,37 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 - **Baza leży → giełda staje, ale nic nie ginie.** Zapis jest ponawiany do skutku; gdy kolejka
   się zapełni, silnik czeka (backpressure). Insert jest idempotentny, więc ponowienie nie dubluje.
 
+## Zdarzenia w Kafce (transactional outbox)
+
+```
+engine_event ──► OutboxRelay (co 100 ms) ──► Kafka: exchange.events, klucz = spółka
+ (id > kursor)    1 transakcja: zablokuj kursor → wyślij → poczekaj na ack → przesuń kursor
+```
+
+Dziennik w bazie jest jedynym źródłem prawdy; do Kafki trafia z niego, nigdy z pominięciem.
+Dzięki temu Kafka nie zobaczy zdarzenia, którego nie ma w bazie, a padnięty broker niczego nie gubi —
+kursor stoi, dopóki broker nie potwierdzi.
+
+- **Co najmniej raz.** Po awarii w połowie paczki część wiadomości pójdzie drugi raz.
+  Odbiorca odrzuca powtórki po `(runId, symbol, sequence)`.
+- **Kolejność w obrębie spółki.** Klucz = spółka → jedna partycja; producent idempotentny
+  (`acks=all`), więc ponowienia nie zamieniają kolejności.
+- **Dziennik zostaje append-only.** Relay pamięta tylko numer ostatniego wysłanego zdarzenia
+  (`outbox_cursor`), zamiast oznaczać każdy wiersz.
+
+Kontrakt wiadomości (JSON, ceny w groszach):
+
+```json
+{"runId":3,"symbol":"KGH","sequence":2,"timestamp":"2026-10-09T14:03:11.512Z","type":"TRADE",
+ "makerOrderId":1,"takerOrderId":2,"takerSide":"BUY","price":18055,"quantity":5}
+```
+
+| `type` | pola |
+|---|---|
+| `RESTED` | `orderId`, `side`, `price`, `quantity` |
+| `TRADE` | `makerOrderId`, `takerOrderId`, `takerSide`, `price`, `quantity` |
+| `CANCELLED` | `orderId`, `quantity`, `reason` (`REQUESTED` / `NO_LIQUIDITY`) |
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -129,8 +160,9 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 | Zapisu asynchronicznego | kolejność, sklejanie paczek, ponawianie z rosnącą przerwą, backpressure, zamykanie z martwą bazą w limicie czasu |
 | Cyklu życia | pełna kolejka, zamykanie w trakcie pracy, przerwania, błędy odbiorcy zdarzeń |
 | HTTP | MockMvc na prawdziwym silniku: pełne odpowiedzi JSON, 400/404, zablokowany silnik → 504, pełna kolejka → 503 |
-| **Integracyjne** | prawdziwy PostgreSQL w Dockerze (Testcontainers): zapis każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza |
-| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API i baza nie znają się nawzajem |
+| **Integracyjne** | prawdziwy PostgreSQL i Kafka w Dockerze (Testcontainers): zapis i odczyt każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza → Kafka |
+| Outboxa | kolejność i format wiadomości, awaria brokera w połowie paczki, brak potwierdzeń, wolny broker w limicie czasu, drugi relay nie wysyła równolegle |
+| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API nie zna bazy ani brokera |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 156/163 (ocalałe to mutanty równoważne i logowanie), próg 85% |
 
 ```bash
