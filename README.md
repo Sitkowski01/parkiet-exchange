@@ -19,7 +19,7 @@ nie ich odbiorcą.
 | 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
 | 5 | Zapis poza wątkiem silnika, transactional outbox → Kafka | ✅ |
 | 6 | Notowania na żywo przez WebSocket | ✅ |
-| 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
+| 7 | Boty rynkowe zakotwiczone w cenach GPW | ✅ |
 | 8 | Odtwarzanie arkusza z logu zdarzeń, metryki, benchmarki | |
 
 ## Arkusz zleceń
@@ -176,6 +176,32 @@ ws://localhost:8080/ws/market?symbols=CDR,PKO
 | `1008 too slow, reconnect` | kolejka klienta pełna |
 | `1013 too many clients` | przekroczony limit połączeń |
 
+## Boty i tryb demo
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=demo'
+```
+
+Giełda z ruchem: dla każdej spółki **animator rynku** trzyma kupno i sprzedaż wokół wartości
+godziwej, a **gracz losowy** zbija jego kwotowania i dokłada zlecenia z limitem. Ceny startowe
+to ostatnie kursy z GPW (Yahoo Finance, `CDR` → `CDR.WA`); gdy źródło nie odpowie — ceny
+z konfiguracji.
+
+```
+             wartość godziwa (losowe błądzenie, kroki procentowe)
+                         │
+   animator: kupno ◄─────┼─────► sprzedaż      rozstęp 0,2%, przestawiane co 200 ms
+                         │
+   gracz losowy: 70% MARKET (transakcje), 30% LIMIT obok wartości (głębokość arkusza)
+```
+
+- Boty to zwykli klienci silnika — te same zlecenia co z HTTP, przez te same kolejki.
+- Animator przestawia kwotowania **po jednej stronie naraz**, zaczynając od tej, od której cena
+  ucieka: druga strona stoi cały czas, a bot nigdy nie handluje sam ze sobą.
+- Każda spółka ma osobne zadanie — zablokowany silnik jednej nie zatrzymuje botów pozostałych.
+- Boty ruszają dopiero po pełnym starcie aplikacji i stają jako pierwsze przy zamykaniu.
+- Domyślnie wyłączone: bez profilu `demo` w arkuszu jest tylko to, co złożą klienci.
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -190,6 +216,7 @@ ws://localhost:8080/ws/market?symbols=CDR,PKO
 | **Integracyjne** | prawdziwy PostgreSQL i Kafka w Dockerze (Testcontainers): zapis i odczyt każdego typu zdarzenia, transakcja „wszystko albo nic”, `CHECK`-i schematu, cała droga HTTP → silnik → baza → Kafka |
 | Outboxa | kolejność i format wiadomości, awaria brokera w połowie paczki, brak potwierdzeń, wolny broker w limicie czasu, drugi relay nie wysyła równolegle |
 | Notowań | wolny klient rozłączany bez blokowania innych, pełna kolejka huba gubi paczkę zamiast zatrzymać silnik, obraz arkusza tylko dla spółek z widzami, limit klientów; plus prawdziwe gniazdo: obraz → transakcja → nowy obraz |
+| Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API nie zna bazy ani brokera |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API i notowań i sprawdza, czy testy to zauważą. Wynik: 228/243 (ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
