@@ -13,7 +13,7 @@ nie ich odbiorcą.
 
 | Etap | Zakres | |
 |---|---|---|
-| 1 | Szkielet, CI, narzędzia testowe, limit rozmiaru commita | ✅ |
+| 1 | Szkielet, CI, narzędzia testowe | ✅ |
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
 | 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
@@ -136,13 +136,4 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
 ./gradlew pitest    # testy mutacyjne -> build/reports/pitest
-```
-
-## Konwencje
-
-Commit ma maksymalnie **200 linii diffa** — da się go przeczytać w jednym podejściu.
-Pilnuje tego hook; po sklonowaniu włącz go raz:
-
-```bash
-git config core.hooksPath .githooks
 ```
