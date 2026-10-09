@@ -20,6 +20,20 @@ spring:
         # Polaczenie juz wziete, a baza zawisla w polowie zapytania: bez limitu sterownik
         # czekalby w nieskonczonosc, a za watkiem event-writer stanelaby cala gielda. W sekundach.
         socketTimeout: 5
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      # Zapis potwierdzony przez wszystkie repliki i producent idempotentny: ponowienie po bledzie
+      # sieci nie zdubluje wiadomosci w partycji ani nie zamieni kolejnosci. W Kafce 3+ to domyslne,
+      # tu jawnie, bo od tego zalezy poprawnosc outboxa.
+      acks: all
+      properties:
+        enable.idempotence: true
+        # Domyslnie send() potrafi wisiec 60 s na metadanych, gdy brokera nie ma -- a relay
+        # trzyma w tym czasie transakcje z zablokowanymi wierszami.
+        max.block.ms: 5000
+        request.timeout.ms: 5000
+        delivery.timeout.ms: 10000
   jackson:
     # Domyslnie Jackson jest poblazliwy: "quantity": 10.9 obcialby do 10, a "side": 1
     # zamienil na SELL (indeks w enumie). Na gieldzie wolimy 400 niz zgadywanie.
@@ -34,3 +48,8 @@ exchange:
   symbols: [CDR, PKO, PKN, PZU, KGH, ALE]
   queue-capacity: 10000
   request-timeout: 5s
+  outbox:
+    poll-interval: 100ms
+    batch-size: 500
+    # Dluzej niz delivery.timeout.ms producenta: to producent ma zglosic blad, nie my.
+    send-timeout: 15s

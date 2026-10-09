@@ -27,10 +27,10 @@ class ArchitectureTest {
     }
 
     @Test
-    void httpAndDatabaseDoNotKnowEachOther() {
+    void httpDoesNotKnowDatabaseOrBroker() {
         noClasses().that().resideInAPackage("..exchange.api..")
-                .should().dependOnClassesThat().resideInAPackage("..exchange.persistence..")
-                .because("API rozmawia z silnikiem, a silnik oddaje zdarzenia do bazy przez EventSink -- "
+                .should().dependOnClassesThat().resideInAnyPackage("..exchange.persistence..", "..exchange.messaging..")
+                .because("API rozmawia z silnikiem, silnik oddaje zdarzenia do bazy przez EventSink, a do Kafki trafiaja z bazy -- "
                         + "kontroler piszacy do bazy z pominieciem silnika rozjechalby dziennik z arkuszem")
                 .check(PRODUCTION);
         noClasses().that().resideInAPackage("..exchange.persistence..")

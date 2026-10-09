@@ -1,5 +1,5 @@
-# Baza do pracy lokalnej. ./gradlew bootRun podnosi ja sam (spring-boot-docker-compose)
-# i podaje aplikacji adres, uzytkownika i haslo -- nie trzeba ich nigdzie wpisywac.
+# Baza i broker do pracy lokalnej. ./gradlew bootRun podnosi je sam (spring-boot-docker-compose)
+# i podaje aplikacji adresy, uzytkownika i haslo -- nie trzeba ich nigdzie wpisywac.
 services:
   postgres:
     image: postgres:17-alpine
@@ -9,3 +9,10 @@ services:
       POSTGRES_PASSWORD: exchange
     ports:
       - "5432"
+
+  # Kafka w trybie KRaft (bez ZooKeepera), jeden wezel. Staly port, bo broker oglasza
+  # klientom adres localhost:9092 -- przy losowym porcie klient dostalby zly adres.
+  kafka:
+    image: apache/kafka-native:4.2.1
+    ports:
+      - "9092:9092"
