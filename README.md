@@ -16,7 +16,7 @@ nie ich odbiorcą.
 | 1 | Szkielet, CI, narzędzia testowe, limit rozmiaru commita | ✅ |
 | 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
 | 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
-| 4 | REST API, PostgreSQL, Flyway, Testcontainers | ⏳ |
+| 4 | REST API ✅, PostgreSQL, Flyway, Testcontainers | ⏳ |
 | 5 | Transactional outbox → Kafka | |
 | 6 | Notowania na żywo przez WebSocket | |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW (Stooq) | |
@@ -65,6 +65,38 @@ Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 - **Zamykanie** kończy wszystkie przyjęte polecenia; jest odporne na przerwania wątku
   i odmawia wywołania z wątku silnika, które czekałoby na samo siebie.
 
+## REST API
+
+```bash
+./gradlew bootRun
+
+curl localhost:8080/api/instruments
+# ["CDR","PKO","PKN","PZU","KGH","ALE"]
+
+curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
+     -d '{"side":"SELL","type":"LIMIT","price":"250.40","quantity":10}'
+# {"orderId":1,"events":[{"type":"RESTED","orderId":1,"side":"SELL","price":"250.40","quantity":10}]}
+
+curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
+     -d '{"side":"BUY","type":"MARKET","quantity":4}'
+# {"orderId":2,"events":[{"type":"TRADE","makerOrderId":1,"takerOrderId":2,"takerSide":"BUY","price":"250.40","quantity":4}]}
+
+curl localhost:8080/api/instruments/CDR/book?levels=5
+curl -X DELETE localhost:8080/api/instruments/CDR/orders/1
+```
+
+| Kod | Kiedy |
+|---|---|
+| 201 / 200 | zlecenie przyjęte / anulowane / arkusz |
+| 400 | zła treść: ułamek grosza, LIMIT bez ceny, MARKET z ceną, ilość 10.9, nieznany enum |
+| 404 | nieznana spółka albo zlecenia nie ma w arkuszu |
+| 503 | kolejka spółki pełna — zlecenie **na pewno nie weszło**, można ponowić |
+| 504 | silnik nie odpowiedział na czas — stan **nieznany**, nie ponawiać w ciemno |
+
+Błędy w formacie RFC 9457 (`application/problem+json`). Ceny w JSON-ie to tekst
+(`"250.40"`), żeby klient w JS nie zgubił groszy w `double`. Spółki, pojemność kolejki
+i limit czasu: [`application.yml`](src/main/resources/application.yml).
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -74,8 +106,9 @@ Domena to czysta Java bez Springa — pilnuje tego test ArchUnit.
 | Niezmienniki | po każdym kroku: arkusz się nie krzyżuje, żadna akcja nie znika ani nie powstaje |
 | **Współbieżności** | 8 wątków × 2000 poleceń naraz; potem cały przebieg odtworzony jednowątkowo z dziennika zdarzeń musi dać identyczny wynik |
 | Cyklu życia | pełna kolejka, zamykanie w trakcie pracy, przerwania, błędy odbiorcy zdarzeń |
+| HTTP | MockMvc na prawdziwym silniku: pełne odpowiedzi JSON, 400/404, zablokowany silnik → 504, pełna kolejka → 503 |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny i silnika i sprawdza, czy testy to zauważą. Wynik: 103/104, próg 85% |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika i API i sprawdza, czy testy to zauważą. Wynik: 126/127, próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo)
