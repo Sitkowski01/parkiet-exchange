@@ -47,8 +47,8 @@ tasks.jacocoTestReport {
 pitest {
 	junit5PluginVersion = "1.2.3"
 	pitestVersion = "1.30.0"
-	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*")
-	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*")
+	targetClasses = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*")
+	targetTests = setOf("io.github.sitkowski01.exchange.domain.*", "io.github.sitkowski01.exchange.engine.*", "io.github.sitkowski01.exchange.api.*")
 	threads = 4
 	outputFormats = setOf("HTML", "XML")
 	timestampedReports = false
