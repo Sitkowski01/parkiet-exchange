@@ -1,0 +1,11 @@
+# Baza do pracy lokalnej. ./gradlew bootRun podnosi ja sam (spring-boot-docker-compose)
+# i podaje aplikacji adres, uzytkownika i haslo -- nie trzeba ich nigdzie wpisywac.
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: exchange
+      POSTGRES_USER: exchange
+      POSTGRES_PASSWORD: exchange
+    ports:
+      - "5432"
