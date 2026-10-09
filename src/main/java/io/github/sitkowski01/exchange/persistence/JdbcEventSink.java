@@ -19,15 +19,17 @@ import java.util.List;
  * <p>Paczka zdarzen jednego polecenia idzie w jednej transakcji: albo wszystkie zdarzenia
  * zlecenia (np. dwie transakcje i reszta w arkuszu), albo zadne. Nigdy polowa.
  *
- * <p>Wolane z watku silnika, wiec instrument czeka na baze -- ok. 1 ms na polecenie.
- * To swiadome uproszczenie: zapis poza watkiem silnika (outbox) to etap 5.
+ * <p>Idempotentny ({@code on conflict do nothing}): commit, ktorego potwierdzenie zginelo w sieci,
+ * jest ponawiany przez {@code AsyncEventSink} i nie moze zablokowac dziennika konfliktem klucza.
+ * Klucz (przebieg, spolka, numer) nadaje silnik, wiec konflikt oznacza wylacznie powtorke.
  */
 public final class JdbcEventSink implements EventSink {
 
     private static final String INSERT = """
             insert into engine_event (run_id, symbol, sequence, occurred_at, type, order_id,
                                       maker_order_id, taker_order_id, side, price, quantity, reason)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""";
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            on conflict (run_id, symbol, sequence) do nothing""";
 
     private final JdbcTemplate jdbc;
     private final TransactionTemplate tx;

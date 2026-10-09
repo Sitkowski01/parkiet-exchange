@@ -77,13 +77,26 @@ class JdbcEventSinkTest {
     @Test
     void batchIsAllOrNothing() {
         JdbcEventSink sink = JdbcEventSink.startRun(jdbc, tx);
-        // Drugie zdarzenie z tym samym numerem lamie klucz glowny -- pierwsze tez nie moze zostac.
+        // Drugie zdarzenie z zerowa iloscia lamie CHECK -- pierwsze tez nie moze zostac.
         List<EngineEvent> broken = List.of(
                 event(1, new BookEvent.OrderRested(1, Side.BUY, 100, 1)),
-                event(1, new BookEvent.OrderRested(2, Side.BUY, 100, 1)));
+                event(2, new BookEvent.OrderRested(2, Side.BUY, 100, 0)));
 
         assertThatThrownBy(() -> sink.publish(broken)).isInstanceOf(DataIntegrityViolationException.class);
         assertThat(jdbc.queryForObject("select count(*) from engine_event", Long.class)).isZero();
+    }
+
+    /** Ponowienie po commicie, ktorego potwierdzenie zginelo: nic sie nie dubluje i nic nie wybucha. */
+    @Test
+    void republishingSameBatchIsNoOp() {
+        JdbcEventSink sink = JdbcEventSink.startRun(jdbc, tx);
+        List<EngineEvent> batch = List.of(
+                event(1, new BookEvent.OrderRested(1, Side.BUY, 100, 1)),
+                event(2, new BookEvent.OrderRested(2, Side.BUY, 100, 1)));
+        sink.publish(batch);
+        sink.publish(batch);
+
+        assertThat(jdbc.queryForObject("select count(*) from engine_event", Long.class)).isEqualTo(2);
     }
 
     @Test
