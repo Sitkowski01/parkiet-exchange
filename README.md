@@ -14,22 +14,39 @@ w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-be
 
 [![Parkiet — terminal w przeglądarce](docs/parkiet.png)](https://sitekmikolaj.pl/parkiet/)
 
+## W 30 sekund
+
+- **Kojarzenie jak na GPW** — najpierw cena, potem czas; ceny w groszach jako `long`. Każda spółka ma
+  własny wątek silnika, więc arkusz nie potrzebuje blokad (model LMAX).
+- **Nic nie ginie** — każde zdarzenie trafia do dziennika w PostgreSQL (zapis poza wątkiem silnika, group
+  commit), stamtąd przez transactional outbox do Kafki. Po restarcie arkusz odtwarza się z dziennika
+  (event sourcing), numeracja zleceń ciągnie się dalej.
+- **Na żywo** — notowania przez WebSocket, boty zakotwiczone w cenach z GPW, terminal w przeglądarce,
+  metryki w Prometheus/Grafana.
+- **Liczby** — silnik 2,5 mln zleceń/s (JMH, 6 spółek); cała droga HTTP → Postgres → Kafka
+  ok. 1000 zleceń/s przy p95 8 ms (k6).
+- **Testy** — 238 automatycznych + 13 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
+  współbieżności, Testcontainers, mutacyjne (PIT 93%), ArchUnit, Playwright.
+
+Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · Micrometer · Prometheus · Grafana ·
+JUnit · Testcontainers · PIT · ArchUnit · JMH · k6 · Playwright
+
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=demo'   # Docker; potem http://localhost:8080
 ```
 
-## Stan
+<details>
+<summary><b>In English</b></summary>
 
-| Etap | Zakres | |
-|---|---|---|
-| 1 | Szkielet, CI, narzędzia testowe | ✅ |
-| 2 | Arkusz zleceń: LIMIT, MARKET, anulowanie, głębokość rynku | ✅ |
-| 3 | Silnik: jeden wątek na instrument, kolejka poleceń | ✅ |
-| 4 | REST API, dziennik zdarzeń w PostgreSQL (Flyway, Testcontainers) | ✅ |
-| 5 | Zapis poza wątkiem silnika, transactional outbox → Kafka | ✅ |
-| 6 | Notowania na żywo przez WebSocket | ✅ |
-| 7 | Boty rynkowe zakotwiczone w cenach GPW | ✅ |
-| 8 | Restart z dziennika (event sourcing), wykres ze świec, metryki, benchmarki, terminal w przeglądarce | ✅ |
+Parkiet is a stock exchange engine written from scratch in Java 21 and Spring Boot 4. Orders are matched
+by price, then time, like on the Warsaw Stock Exchange; every instrument has its own engine thread, so the
+order book needs no locks. Every event is journaled in PostgreSQL off the engine thread and relayed to Kafka
+through a transactional outbox; after a restart the book is rebuilt from the journal (event sourcing).
+Quotes stream over WebSocket to a browser trading terminal, bots anchored to real WSE prices create the
+market activity, and Prometheus/Grafana show where the pipeline backs up. Tested with differential tests
+against a naive oracle, concurrency tests, Testcontainers, mutation testing (PIT 93%) and Playwright e2e.
+The [live demo](https://sitekmikolaj.pl/parkiet/) replays a recorded session in the browser, no server needed.
+</details>
 
 ## Arkusz zleceń
 
@@ -357,3 +374,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 cd e2e && npm install && npm test
 npm run test:replay   # demo z nagrania: bez giełdy, statyczna paczka i przewidywalne nagranie
 ```
+
+## Licencja
+
+MIT — [LICENSE](LICENSE).
