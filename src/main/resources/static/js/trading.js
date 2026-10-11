@@ -30,7 +30,7 @@ export function renderOrders() {
     el("td", {}, o.type === "MARKET" ? "PKC" : "limit"),
     el("td", {}, o.price ? price(o.price) : "—"), el("td", {}, ACTIVE.has(o.state) && o.remaining < o.quantity ? `${qty(o.remaining)} z ${qty(o.quantity)}` : qty(o.quantity)),
     el("td", {}, el("span", { class: `state ${o.state}` }, LABEL[o.state])),
-    el("td", {}, ACTIVE.has(o.state) ? el("button", { class: "cancel", onclick: () => cancel(o) }, "anuluj") : ""))));
+    el("td", {}, ACTIVE.has(o.state) ? el("button", { class: "cancel", onclick: (e) => { e.target.disabled = true; cancel(o); } }, "anuluj") : ""))));
 }
 
 async function cancel(order) {
@@ -61,13 +61,24 @@ export function fill(symbol, makerOrderId, quantity) {
 
 let onChange = () => {};
 
+// Te same granice co na serwerze (OrderRequest.MAX_PRICE, MAX_QUANTITY): zle zlecenie nie wychodzi z przegladarki.
+const MAX_PRICE = 1_000_000_000, MAX_QUANTITY = 1_000_000_000;
+
+function invalid(type, p, n) {
+  if (!Number.isInteger(n) || n < 1 || n > MAX_QUANTITY) return "Ilość: liczba całkowita od 1 do 1 000 000 000";
+  if (type === "LIMIT" && (p == null || p < 1)) return "Cena: liczba większa od zera, najwyżej 2 miejsca po przecinku";
+  if (type === "LIMIT" && p > MAX_PRICE) return "Cena: najwyżej 10 000 000 zł";
+  return null;
+}
+
 /** Formularz: strona, typ, cena, ilosc -> POST. Wynik opisuje, co dokladnie zrobil silnik. */
 export function ticket(getSymbol, getBook, changed) {
   onChange = changed;
   const form = document.getElementById("ticket");
   const priceIn = document.getElementById("price"), qtyIn = document.getElementById("quantity");
-  const submit = document.getElementById("submit");
+  const submit = document.getElementById("submit"), note = document.getElementById("ticket-note");
   const state = { side: "BUY", type: "LIMIT" };
+  let suggested = false;
 
   const refresh = () => {
     form.querySelectorAll("[data-side]").forEach((b) => b.classList.toggle("on", b.dataset.side === state.side));
@@ -90,8 +101,10 @@ export function ticket(getSymbol, getBook, changed) {
 
   form.addEventListener("submit", async (e) => {
     e.preventDefault();
-    const symbol = getSymbol(), p = toGrosze(priceIn.value), n = Number(qtyIn.value);
-    const body = { side: state.side, type: state.type, quantity: n, ...(state.type === "LIMIT" ? { price: p == null ? priceIn.value : toApi(p) } : {}) };
+    const symbol = getSymbol(), p = toGrosze(priceIn.value), n = Number(qtyIn.value.trim());
+    note.textContent = invalid(state.type, p, n) ?? "";
+    if (note.textContent) return;
+    const body = { side: state.side, type: state.type, quantity: n, ...(state.type === "LIMIT" ? { price: toApi(p) } : {}) };
     submit.disabled = true;
     try {
       const res = await api(`/api/instruments/${symbol}/orders`, { method: "POST", body: JSON.stringify(body) });
@@ -109,17 +122,19 @@ export function ticket(getSymbol, getBook, changed) {
     }
   });
 
-  // Pusta cena po zmianie spolki: podpowiadamy najlepsza oferte po drugiej stronie.
+  // Pusta cena po zmianie spolki: raz podpowiadamy najlepsza oferte po drugiej stronie. Tylko raz --
+  // inaczej kazdy obraz arkusza (co 100 ms) wpisywalby cene z powrotem, gdy uzytkownik ja skasuje.
   const suggest = () => {
+    if (suggested) return;
     const book = getBook();
     const best = (state.side === "BUY" ? book?.asks[0] : book?.bids[0])?.price;
-    if (best && !priceIn.value) { priceIn.value = toApi(best).replace(".", ","); refresh(); }
+    if (best && !priceIn.value) { priceIn.value = toApi(best).replace(".", ","); suggested = true; refresh(); }
   };
 
   return {
     refresh,
     suggest,
-    clearPrice() { priceIn.value = ""; },
+    clearPrice() { priceIn.value = ""; suggested = false; note.textContent = ""; },
     /** Klik w poziom arkusza: cena do formularza, strona przeciwna (bierzemy z tej strony arkusza). */
     pick(p, side) { state.type = "LIMIT"; state.side = side; priceIn.value = toApi(p).replace(".", ","); refresh(); },
   };
