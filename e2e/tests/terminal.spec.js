@@ -27,10 +27,15 @@ async function placeLimit(page, side, price, quantity) {
 const myOrder = (page, id) => page.locator("#orders tr", { has: page.locator("td", { hasText: new RegExp(`^${id}$`) }) });
 
 test("laczy sie ze strumieniem i pokazuje wszystkie spolki", async ({ page }) => {
+  const failed = [];
+  page.on("response", (r) => r.status() >= 400 && failed.push(r.url()));
+  page.on("pageerror", (e) => failed.push(e.message));
   await open(page, "CDR");
   await expect(page.locator("#strip .tile")).toHaveCount(6);
   await expect(page.locator("#strip .tile.on .tile-sym")).toHaveText("CDR");
   await expect(page.locator("#status .status-text")).toHaveText("na żywo");
+  await expect(page.locator("#replay-note")).toBeHidden();
+  expect(failed).toEqual([]);
 });
 
 test("transakcja innego klienta trafia na tasme, do arkusza i na wykres", async ({ page, request }) => {
