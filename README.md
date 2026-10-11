@@ -232,6 +232,11 @@ engine_event (ostatni run, spółka, sequence 1..n) ──► OrderBook.Rebuilde
 - **Uczciwie o granicy:** zapis jest asynchroniczny, więc po twardej awarii (kill -9) mogą przepaść
   ostatnie milisekundy pracy, które klient zdążył zobaczyć jako przyjęte. Arkusz odtwarza się wtedy
   spójnie do ostatniego zapisanego zdarzenia. Zwykłe zamknięcie zapisuje wszystko.
+  Numery zleceń, które przepadły w takiej awarii, dostaną po restarcie nowe zlecenia — klient trzymający
+  stary numer anulowałby cudze. Na produkcji: pula numerów rezerwowana w bazie z wyprzedzeniem.
+- **Bez migawek.** Każdy start odtwarza cały przebieg od pierwszego zdarzenia, więc czas startu rośnie
+  z długością pracy (boty w trybie demo dokładają zdarzenia bez przerwy). Następny krok: okresowa migawka arkusza
+  i odtwarzanie od niej.
 
 Test różnicowy sprawdza, że arkusz odbudowany z 5000 losowych zdarzeń jest nieodróżnialny od oryginału —
 także w kolejnych 2000 zleceniach, czyli w priorytecie czasu, którego nie widać w samej głębokości.
