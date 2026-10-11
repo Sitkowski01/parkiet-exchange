@@ -47,6 +47,14 @@ public final class JdbcEventSink implements EventSink {
         return new JdbcEventSink(jdbc, tx, runId);
     }
 
+    /**
+     * Pisze dalej do istniejacego przebiegu -- po restarcie z arkuszem odtworzonym z dziennika.
+     * Silnik numeruje wtedy zdarzenia od miejsca, w ktorym przebieg sie urwal, wiec klucz sie nie zderza.
+     */
+    public static JdbcEventSink resumeRun(JdbcTemplate jdbc, TransactionTemplate tx, long runId) {
+        return new JdbcEventSink(jdbc, tx, runId);
+    }
+
     public long runId() {
         return runId;
     }

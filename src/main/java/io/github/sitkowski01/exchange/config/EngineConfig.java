@@ -28,15 +28,18 @@ class EngineConfig {
     /**
      * {@code close} przy zamykaniu kontekstu: silnik dokonczy zlecenia z kolejki,
      * zanim aplikacja sie wylaczy. Odbiorcy oznaczeni {@link EngineSink} (dziennik, notowania)
-     * dostaja kazda paczke zdarzen; bez nich zdarzenia nigdzie nie ida.
+     * dostaja kazda paczke zdarzen; bez nich zdarzenia nigdzie nie ida. Arkusze startuja
+     * z {@link StartingState} -- po restarcie odtworzone z dziennika; bez warstwy bazy od zera.
      *
      * <p>Lista wstrzykiwana wprost, a nie przez {@code ObjectProvider}: tylko tak Spring zapisuje,
      * ze silnik zalezy od odbiorcow, i zamyka silnik pierwszy. Inaczej zdarzenia ostatnich polecen
      * trafilyby do juz zamknietego odbiorcy (pilnuje tego test w MiniExchangeApplicationTests).
      */
     @Bean(destroyMethod = "close")
-    MatchingEngine matchingEngine(ExchangeProperties properties, Clock clock, @EngineSink List<EventSink> sinks) {
-        return new MatchingEngine(properties.symbols(), properties.queueCapacity(), clock, EventSink.fanOut(sinks));
+    MatchingEngine matchingEngine(ExchangeProperties properties, Clock clock, @EngineSink List<EventSink> sinks,
+                                  ObjectProvider<StartingState> start) {
+        return new MatchingEngine(properties.symbols(), properties.queueCapacity(), clock, EventSink.fanOut(sinks),
+                start.getIfAvailable(StartingState::fresh).instruments());
     }
 
     /**
