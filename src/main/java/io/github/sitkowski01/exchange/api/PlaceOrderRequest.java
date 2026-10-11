@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.api;
 import io.github.sitkowski01.exchange.domain.OrderRequest;
 import io.github.sitkowski01.exchange.domain.OrderType;
 import io.github.sitkowski01.exchange.domain.Side;
+import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
@@ -17,7 +18,7 @@ import java.math.BigDecimal;
 public record PlaceOrderRequest(
         @NotNull Side side,
         @NotNull OrderType type,
-        @Positive BigDecimal price,
+        @Positive @DecimalMax("10000000") BigDecimal price,
         @NotNull @Positive @Max(OrderRequest.MAX_QUANTITY) Long quantity) {
 
     /**

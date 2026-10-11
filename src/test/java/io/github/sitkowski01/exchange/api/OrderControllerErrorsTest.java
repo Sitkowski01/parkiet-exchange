@@ -26,6 +26,7 @@ class OrderControllerErrorsTest extends ApiTestBase {
                 "{\"side\":\"BUY\",\"type\":\"MARKET\",\"price\":10,\"quantity\":1}",
                 "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":\"10.001\",\"quantity\":1}",
                 "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":-1,\"quantity\":1}",
+                "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":\"10000000.01\",\"quantity\":1}",
                 "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":10,\"quantity\":0}",
                 "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":10,\"quantity\":1000000001}",
                 "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":10}",
