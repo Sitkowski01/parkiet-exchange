@@ -115,6 +115,22 @@ class AsyncEventSinkFailureTest {
         assertThat(attempts.get()).isEqualTo(afterClose).isLessThan(15);
     }
 
+    /** Scenariusz z review: zdrowa baza, ale kolejka dluzsza niz limit zamykania -- nic nie przepada. */
+    @Test
+    void healthySlowWriterIsNotCutOffByShutdownClock() {
+        AsyncEventSink sink = AsyncEventSink.start(batch -> {
+            sleep(50);
+            recorder.publish(batch);
+        }, 1, BACKOFF, Duration.ofMillis(100));
+        sink.beginShutdown();
+        for (long seq = 1; seq <= 6; seq++) {
+            sink.publish(List.of(event(seq)));
+        }
+        sink.close();
+
+        assertThat(recorder.calls.stream().flatMap(List::stream)).containsExactly(1L, 2L, 3L, 4L, 5L, 6L);
+    }
+
     @Test
     void closeWaitsUntilPendingEventsAreWritten() {
         AsyncEventSink sink = AsyncEventSink.start(batch -> {

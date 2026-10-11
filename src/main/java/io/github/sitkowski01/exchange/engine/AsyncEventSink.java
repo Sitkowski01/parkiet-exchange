@@ -22,8 +22,10 @@ import java.util.concurrent.locks.LockSupport;
  * dziennika. Tak samo przy paczce, ktorej odbiorca nigdy nie przyjmie -- dziura w numeracji
  * dziennika bylaby gorsza niz zatrzymanie.
  *
- * <p>Zamykanie ma limit czasu liczony od {@link #beginShutdown}: po nim nikt juz na nic nie czeka,
- * a niezapisane zdarzenia ida do logu jako strata. Inaczej martwa baza nie dalaby zamknac aplikacji.
+ * <p>Zamykanie ma limit czasu liczony od {@link #beginShutdown}, ale dotyczy tylko awarii: gdy po nim
+ * zapis sie nie udaje, nikt juz na nic nie czeka, a reszta zdarzen idzie do logu jako strata -- inaczej
+ * martwa baza nie dalaby zamknac aplikacji. Zdrowa baza z dluga kolejka dostaje tyle czasu, ile trzeba.
+ * Zawieszone zapytanie konczy limit sterownika (socketTimeout), wiec i ono konczy sie bledem.
  *
  * <p>Kolejnosc jest zachowana: jedna kolejka FIFO i jeden watek piszacy.
  */
@@ -45,6 +47,9 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     private final Object lock = new Object();
     private volatile boolean stopped;
     private volatile long deadline = NO_DEADLINE;
+    // failing: ostatni zapis sie nie udal. gaveUp: nie udal sie po terminie -- reszta idzie do kosza.
+    private volatile boolean failing;
+    private volatile boolean gaveUp;
 
     private AsyncEventSink(EventSink delegate, int capacity, Duration retryBackoff, Duration closeTimeout) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
@@ -70,8 +75,8 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     }
 
     /**
-     * Czeka, gdy kolejka jest pelna. Po uplywie czasu na zamkniecie -- albo po {@link #close} --
-     * rzuca wyjatek zamiast czekac: silnik zaloguje strate, ale sam sie zamknie.
+     * Czeka, gdy kolejka jest pelna. Gdy po uplywie czasu na zamkniecie baza nie przyjmuje zapisu --
+     * albo po {@link #close} -- rzuca wyjatek zamiast czekac: silnik zaloguje strate, ale sam sie zamknie.
      */
     @Override
     public void publish(List<EngineEvent> batch) {
@@ -84,7 +89,7 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
                     return;
                 }
             }
-            if (pastDeadline()) {
+            if (gaveUp || (failing && pastDeadline())) {
                 throw new IllegalStateException("event writer stuck on shutdown, dropping " + batch.size() + " events");
             }
             // Kolejka pelna: czekamy krotko i probujemy znowu. Bez zamka, zeby close() mogl wejsc.
@@ -92,12 +97,12 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
         }
     }
 
-    /** Uruchamia zegar zamykania. Wolac na poczatku zamykania aplikacji, zanim zamknie sie silnik. */
     /** Paczki czekajace na zapis -- do metryk. Rosnie, gdy baza nie nadaza albo lezy. */
     public int pending() {
         return queue.size();
     }
 
+    /** Uruchamia zegar zamykania. Wolac na poczatku zamykania aplikacji, zanim zamknie sie silnik. */
     public void beginShutdown() {
         synchronized (lock) {
             if (deadline == NO_DEADLINE) {
@@ -152,14 +157,20 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     private void write(List<EngineEvent> events) {
         long backoff = retryBackoff.toMillis();
         for (int attempt = 1; ; attempt++) {
-            if (pastDeadline()) {
+            if (gaveUp) {
                 LOG.log(System.Logger.Level.ERROR, "shutdown timeout reached, " + events.size() + " events lost");
                 return;
             }
             try {
                 delegate.publish(events);
+                failing = false;
                 return;
             } catch (Throwable e) {
+                failing = true;
+                if (pastDeadline()) {
+                    gaveUp = true;
+                    continue;
+                }
                 // Pelny stos tylko raz -- godzinna awaria bazy nie moze zasypac logu.
                 String message = "event write failed (attempt " + attempt + "), retrying in " + backoff + " ms";
                 if (attempt == 1) {
