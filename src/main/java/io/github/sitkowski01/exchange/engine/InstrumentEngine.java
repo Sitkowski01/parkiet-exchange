@@ -82,6 +82,11 @@ public final class InstrumentEngine implements AutoCloseable {
         return symbol;
     }
 
+    /** Polecenia czekajace w kolejce -- do metryk. Rosnaca kolejka = silnik nie nadaza. */
+    public int queueSize() {
+        return queue.size();
+    }
+
     public CompletableFuture<OrderResult> place(Side side, OrderType type, long price, long quantity) {
         return submit(() -> {
             // Czas i walidacja przed zmiana arkusza: jesli cokolwiek tu padnie,

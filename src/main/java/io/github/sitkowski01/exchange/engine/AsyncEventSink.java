@@ -93,6 +93,11 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     }
 
     /** Uruchamia zegar zamykania. Wolac na poczatku zamykania aplikacji, zanim zamknie sie silnik. */
+    /** Paczki czekajace na zapis -- do metryk. Rosnie, gdy baza nie nadaza albo lezy. */
+    public int pending() {
+        return queue.size();
+    }
+
     public void beginShutdown() {
         synchronized (lock) {
             if (deadline == NO_DEADLINE) {

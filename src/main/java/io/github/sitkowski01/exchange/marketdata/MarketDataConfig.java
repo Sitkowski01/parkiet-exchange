@@ -3,6 +3,8 @@ package io.github.sitkowski01.exchange.marketdata;
 import io.github.sitkowski01.exchange.config.EngineSink;
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
 import io.github.sitkowski01.exchange.engine.MatchingEngine;
+import io.micrometer.core.instrument.Gauge;
+import io.micrometer.core.instrument.binder.MeterBinder;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import org.hibernate.validator.constraints.time.DurationMin;
@@ -66,6 +68,12 @@ class MarketDataConfig {
                                         MarketDataProperties props) {
         return new MarketDataHandler(hub, books, Set.copyOf(exchange.symbols()), props.clientQueue(),
                 props.maxClients());
+    }
+
+    @Bean
+    MeterBinder marketDataClients(MarketDataHandler handler) {
+        return registry -> Gauge.builder("exchange.marketdata.clients", handler, MarketDataHandler::clients)
+                .description("Podlaczeni klienci WebSocket").register(registry);
     }
 
     @Bean

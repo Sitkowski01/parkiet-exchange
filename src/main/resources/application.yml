@@ -83,3 +83,15 @@ exchange:
       PZU: 71.76
       KGH: 347.00
       ALE: 51.75
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # /actuator/prometheus zbiera Prometheus (compose.yaml, profil monitoring).
+        include: health, prometheus
+  metrics:
+    distribution:
+      # Histogram czasu odpowiedzi HTTP: Prometheus policzy z niego p50/p99 dla dowolnego okna.
+      percentiles-histogram:
+        http.server.requests: true

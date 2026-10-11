@@ -79,7 +79,7 @@ public final class MarketDataHub implements EventSink, AutoCloseable {
         }
     }
 
-    long droppedBatches() {
+    public long droppedBatches() {
         return dropped.get();
     }
 
