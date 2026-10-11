@@ -41,7 +41,7 @@ class EventJournalTest {
     @BeforeEach
     void setUp() {
         jdbc.execute("truncate engine_event, engine_run");
-        journal = new EventJournal(jdbc);
+        journal = new EventJournal(jdbc, tx);
     }
 
     /** Zapis i odczyt to dwie strony tego samego formatu: co weszlo, musi wyjsc identyczne. */

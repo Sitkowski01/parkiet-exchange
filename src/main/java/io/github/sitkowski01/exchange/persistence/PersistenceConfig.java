@@ -1,7 +1,10 @@
 package io.github.sitkowski01.exchange.persistence;
 
 import io.github.sitkowski01.exchange.config.EngineSink;
+import io.github.sitkowski01.exchange.config.ExchangeProperties;
+import io.github.sitkowski01.exchange.config.StartingState;
 import io.github.sitkowski01.exchange.engine.AsyncEventSink;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -29,8 +32,25 @@ class PersistenceConfig {
     private static final Duration CLOSE_TIMEOUT = Duration.ofSeconds(10);
 
     @Bean
-    JdbcEventSink journal(JdbcTemplate jdbc, TransactionTemplate tx) {
-        return JdbcEventSink.startRun(jdbc, tx);
+    EventJournal eventJournal(JdbcTemplate jdbc, TransactionTemplate tx) {
+        return new EventJournal(jdbc, tx);
+    }
+
+    /**
+     * Po restarcie gielda ciagnie ostatni przebieg dalej, z arkuszami odtworzonymi z dziennika.
+     * {@code exchange.journal.resume=false} -- zawsze nowy przebieg z pustymi arkuszami.
+     */
+    @Bean
+    StartingState startingState(EventJournal journal, ExchangeProperties exchange,
+                                @Value("${exchange.journal.resume:true}") boolean resume) {
+        return resume ? JournalRecovery.recover(journal, exchange.symbols()) : StartingState.fresh();
+    }
+
+    @Bean
+    JdbcEventSink journal(JdbcTemplate jdbc, TransactionTemplate tx, StartingState start) {
+        return start.resumedRun().isPresent()
+                ? JdbcEventSink.resumeRun(jdbc, tx, start.resumedRun().getAsLong())
+                : JdbcEventSink.startRun(jdbc, tx);
     }
 
     /** {@link EngineSink}: do silnika trafia ten odbiorca, a nie {@link JdbcEventSink} bezposrednio. */

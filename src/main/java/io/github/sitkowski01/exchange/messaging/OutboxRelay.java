@@ -51,7 +51,7 @@ public final class OutboxRelay {
                        int batchSize, Duration sendTimeout) {
         this.jdbc = jdbc;
         this.tx = tx;
-        this.journal = new EventJournal(jdbc);
+        this.journal = new EventJournal(jdbc, tx);
         this.publisher = publisher;
         this.topic = topic;
         this.batchSize = batchSize;
