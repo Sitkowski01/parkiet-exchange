@@ -152,7 +152,7 @@ class ParkietApplicationTests {
     @Test
     void tradesReachKafkaInOrder() throws Exception {
         place("KGH", "{\"side\":\"SELL\",\"type\":\"LIMIT\",\"price\":\"180.55\",\"quantity\":20}");
-        place("KGH", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":\"181.00\",\"quantity\":5}");
+        place("KGH", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":\"181.00\",\"quantity\":5,\"clientOrderId\":\"broker-kgh-2\"}");
 
         // Dostawa co najmniej raz: jak prawdziwy odbiorca odrzucamy powtorki po numerze zdarzenia.
         Map<Long, String> received = new TreeMap<>();
@@ -174,8 +174,10 @@ class ParkietApplicationTests {
         }
 
         List<String> events = new ArrayList<>(received.values());
-        assertThat(events.get(0)).contains("\"type\":\"RESTED\"", "\"side\":\"SELL\"", "\"price\":18055");
+        assertThat(events.get(0)).contains("\"type\":\"RESTED\"", "\"side\":\"SELL\"", "\"price\":18055")
+                .doesNotContain("clientOrderId");
+        // Identyfikator klienta zostaje w dzienniku: publiczny strumien pokazalby go drugiej stronie transakcji.
         assertThat(events.get(1)).contains("\"type\":\"TRADE\"", "\"takerSide\":\"BUY\"", "\"price\":18055",
-                "\"quantity\":5");
+                "\"quantity\":5").doesNotContain("clientOrderId");
     }
 }

@@ -1,8 +1,10 @@
 package io.github.sitkowski01.exchange.api;
 
 import com.fasterxml.jackson.annotation.JsonFormat;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import io.github.sitkowski01.exchange.domain.PriceLevel;
 import io.github.sitkowski01.exchange.engine.BookSnapshot;
+import io.github.sitkowski01.exchange.engine.ClientOrderId;
 import io.github.sitkowski01.exchange.engine.OrderResult;
 
 import java.math.BigDecimal;
@@ -14,10 +16,19 @@ final class Views {
     private Views() {
     }
 
-    record OrderView(long orderId, List<EventView> events) {
+    /**
+     * Bez {@code clientOrderId} i z {@code repeated = false} odpowiedz wyglada jak dawniej -- starzy klienci
+     * nic nie zauwaza.
+     *
+     * @param repeated {@code true}: zlecenie z tym {@code clientOrderId} juz bylo -- to jego pierwotny wynik,
+     *                 arkusz sie nie zmienil
+     */
+    record OrderView(long orderId, @JsonInclude(JsonInclude.Include.NON_NULL) String clientOrderId,
+                     @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated, List<EventView> events) {
 
-        static OrderView of(OrderResult result) {
-            return new OrderView(result.orderId(), result.events().stream().map(EventView::of).toList());
+        static OrderView of(OrderResult result, ClientOrderId clientOrderId) {
+            return new OrderView(result.orderId(), ClientOrderId.valueOrNull(clientOrderId),
+                    result.repeated(), result.events().stream().map(EventView::of).toList());
         }
     }
 

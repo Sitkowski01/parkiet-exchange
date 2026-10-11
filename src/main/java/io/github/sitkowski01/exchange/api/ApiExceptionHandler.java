@@ -1,5 +1,6 @@
 package io.github.sitkowski01.exchange.api;
 
+import io.github.sitkowski01.exchange.engine.ClientOrderIdConflictException;
 import io.github.sitkowski01.exchange.engine.EngineRejectedException;
 import io.github.sitkowski01.exchange.engine.UnknownInstrumentException;
 import org.springframework.http.HttpStatus;
@@ -31,13 +32,19 @@ class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
     }
 
+    /** Ten sam clientOrderId z innym zleceniem: klient pomylil identyfikatory, nic nie zlozono. */
+    @ExceptionHandler(ClientOrderIdConflictException.class)
+    ProblemDetail conflict(ClientOrderIdConflictException e) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+    }
+
     /**
-     * Stan nieznany: ponowienie w ciemno mogloby zlozyc zlecenie dwa razy. Pelne rozwiazanie
-     * to id zlecenia nadawane przez klienta (idempotencja) -- tu przynajmniej mowimy prawde.
+     * Stan nieznany: ponowienie w ciemno mogloby zlozyc zlecenie dwa razy. Bezpiecznie mozna je
+     * ponowic tylko z tym samym clientOrderId -- wtedy silnik zwroci pierwotny wynik.
      */
     @ExceptionHandler(EngineTimeoutException.class)
     ProblemDetail timeout(EngineTimeoutException e) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.GATEWAY_TIMEOUT,
-                e.getMessage() + "; the command may still be executed, do not retry blindly");
+                e.getMessage() + "; the command may still be executed, retry only with the same clientOrderId");
     }
 }
