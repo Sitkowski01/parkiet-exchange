@@ -1,18 +1,22 @@
 // Formularz zlecenia, "moje zlecenia" i dziennik zdarzen. Zlecenia z tej przegladarki pamietamy
 // w localStorage -- gielda nie ma kont, wiec to jedyne miejsce, gdzie wiadomo, ktore sa "moje".
-import { api } from "./market.js";
+import { api } from "./transport.js";
 import { el, money, price, qty, toApi, toGrosze } from "./format.js";
 
 const KEY = "parkiet.orders";
+// W demo (replay.js) zlecenia zyja tylko w symulacji -- po przeladowaniu ich nie ma, wiec nie zapisujemy.
+const PERSIST = !document.documentElement.dataset.replay;
 // Czeka w arkuszu: cale (resting) albo z czesci zrealizowane (partial). Tylko takie mozna anulowac.
 const ACTIVE = new Set(["resting", "partial"]);
 const LABEL = { resting: "w arkuszu", filled: "zrealizowane", partial: "częściowo", cancelled: "anulowane", gone: "nieaktywne" };
 let orders = load();
 
 function load() {
+  if (!PERSIST) return [];
   try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; }
 }
 function save() {
+  if (!PERSIST) return;
   try { localStorage.setItem(KEY, JSON.stringify(orders.slice(0, 50))); } catch { /* tryb prywatny */ }
 }
 

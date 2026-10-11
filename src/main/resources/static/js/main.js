@@ -1,6 +1,6 @@
 // Parkiet: sklada panele i laczy je ze strumieniem notowan.
 import { NAMES, compact, percent, price, time } from "./format.js";
-import { api, candles, stream } from "./market.js";
+import { api, candles, stream } from "./transport.js";
 import { CandleChart } from "./chart.js";
 import { Strip, pushTrade, renderBook } from "./panels.js";
 import { fill, log, myPrices, renderOrders, ticket } from "./trading.js";
@@ -101,8 +101,11 @@ stream(symbols, {
   onStatus(state, reason, reconnected) {
     // Transakcje z czasu przerwy nie przyjda strumieniem -- swiece bierzemy od nowa z dziennika.
     if (reconnected) { loadSparks().then(header); loadChart(); }
-    $("status").className = `status ${state}`;
-    $("status").querySelector(".status-text").textContent = state === "live" ? "na żywo" : `rozłączono${reason ? `: ${reason}` : ""} · ponawiam`;
+    // replay: demo z nagrania (replay.js) -- kropka jak na zywo, ale napis mowi prawde.
+    $("status").className = `status ${state === "replay" ? "live" : state}`;
+    $("status").querySelector(".status-text").textContent = state === "live" ? "na żywo"
+      : state === "replay" ? "demo · nagranie sesji" : `rozłączono${reason ? `: ${reason}` : ""} · ponawiam`;
+    $("replay-note").hidden = state !== "replay";
   },
   onBook(book) {
     books.set(book.symbol, book);
