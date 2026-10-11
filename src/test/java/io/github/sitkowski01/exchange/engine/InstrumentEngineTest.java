@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.engine;
 import io.github.sitkowski01.exchange.domain.BookEvent.OrderCancelled;
 import io.github.sitkowski01.exchange.domain.BookEvent.OrderRested;
 import io.github.sitkowski01.exchange.domain.BookEvent.Trade;
+import io.github.sitkowski01.exchange.domain.OrderBook;
 import io.github.sitkowski01.exchange.domain.PriceLevel;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -69,6 +70,16 @@ class InstrumentEngineTest {
 
         assertThat(engine.snapshot(10).join()).isEqualTo(new BookSnapshot(
                 "CDR", 2, List.of(new PriceLevel(99, 5, 1)), List.of(new PriceLevel(101, 7, 1))));
+    }
+
+    @Test
+    void stateHasEveryRestingOrderAndLastSequence() {
+        engine.place(BUY, LIMIT, 99, 5).join();
+        engine.place(BUY, LIMIT, 99, 3).join();
+        engine.place(SELL, MARKET, 0, 2).join();
+
+        assertThat(engine.state().join()).isEqualTo(new StateSnapshot("CDR", 3, new OrderBook.Snapshot(
+                List.of(new OrderRested(1, BUY, 99, 3), new OrderRested(2, BUY, 99, 3)), 3)));
     }
 
     @Test

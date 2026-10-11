@@ -114,6 +114,11 @@ public final class InstrumentEngine implements AutoCloseable {
                 symbol, sequence, book.depth(Side.BUY, levels), book.depth(Side.SELL, levels)));
     }
 
+    /** Stan do migawki arkusza -- tez przez kolejke: nigdy nie trafi w polowe zlecenia. */
+    public CompletableFuture<StateSnapshot> state() {
+        return submit(() -> new StateSnapshot(symbol, sequence, book.snapshot()));
+    }
+
     /**
      * Przestaje przyjmowac polecenia, wykonuje te, ktore juz czekaja, i czeka na koniec watku.
      * Kazde wywolanie -- takze drugie, rownolegle -- wraca dopiero, gdy watek sie skonczyl.
