@@ -46,7 +46,8 @@ export class CandleChart {
     const dpr = window.devicePixelRatio || 1;
     const w = canvas.clientWidth, h = canvas.clientHeight;
     if (!w || !h) return;
-    if (canvas.width !== w * dpr) { canvas.width = w * dpr; canvas.height = h * dpr; }
+    const bw = Math.round(w * dpr), bh = Math.round(h * dpr);
+    if (canvas.width !== bw || canvas.height !== bh) { canvas.width = bw; canvas.height = bh; }
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
 
@@ -150,13 +151,13 @@ function niceStep(raw) {
 }
 
 /** Dopisuje transakcje do swiec o przedziale `seconds` (te same granice co date_bin na serwerze). */
-export function applyTrade(candles, seconds, t, p, q) {
+export function applyTrade(candles, seconds, t, p, q, max = 1000) {
   const bucket = Math.floor(t / (seconds * 1000)) * seconds * 1000;
   const last = candles.at(-1);
   if (last && last.t === bucket) {
     last.h = Math.max(last.h, p); last.l = Math.min(last.l, p); last.c = p; last.v += q;
   } else if (!last || bucket > last.t) {
     candles.push({ t: bucket, o: p, h: p, l: p, c: p, v: q });
-    if (candles.length > 1000) candles.shift();
+    if (candles.length > max) candles.shift();
   }
 }

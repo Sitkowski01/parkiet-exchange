@@ -63,7 +63,7 @@ export class Strip {
 
   /** Transakcja na zywo: swiece 30-sekundowe mini-wykresu + cena. */
   trade(symbol, t, p, q) {
-    applyTrade(this.tiles.get(symbol).series, 30, t, p, q);
+    applyTrade(this.tiles.get(symbol).series, 30, t, p, q, 60); // 60 x 30 s = okno "30 min" z naglowka
     this.update(symbol, p);
   }
 
