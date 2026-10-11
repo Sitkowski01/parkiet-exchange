@@ -117,11 +117,38 @@ curl -X DELETE localhost:8080/api/instruments/CDR/orders/1
 
 | Kod | Kiedy |
 |---|---|
-| 201 / 200 | zlecenie przyjęte / anulowane / arkusz |
-| 400 | zła treść: ułamek grosza, LIMIT bez ceny, MARKET z ceną, ilość 10.9, nieznany enum |
+| 201 / 200 | zlecenie przyjęte / powtórka z tym samym `clientOrderId`, anulowane, arkusz |
+| 400 | zła treść: ułamek grosza, LIMIT bez ceny, MARKET z ceną, ilość 10.9, nieznany enum, zły `clientOrderId` |
+| 409 | `clientOrderId` już użyty dla innego zlecenia |
 | 404 | nieznana spółka albo zlecenia nie ma w arkuszu |
 | 503 | kolejka spółki pełna — zlecenie **na pewno nie weszło**, można ponowić |
-| 504 | silnik nie odpowiedział na czas — stan **nieznany**, nie ponawiać w ciemno |
+| 504 | silnik nie odpowiedział na czas — stan **nieznany**; ponowić można tylko z tym samym `clientOrderId` |
+
+### Bezpieczne ponowienie: `clientOrderId`
+
+Klient (np. dom maklerski) może nadać zleceniu własny identyfikator — odpowiednik `ClOrdID` z FIX:
+
+```bash
+curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
+     -d '{"side":"BUY","type":"LIMIT","price":"250.40","quantity":10,"clientOrderId":"broker-7f3a"}'
+# 201 {"orderId":3,"clientOrderId":"broker-7f3a","events":[...]}
+# ta sama komenda jeszcze raz:
+# 200 {"orderId":3,"clientOrderId":"broker-7f3a","repeated":true,"events":[...]}   ← arkusz bez zmian
+```
+
+- **Powtórka zwraca pierwotny wynik**, a nie drugie zlecenie: to samo `orderId`, te same zdarzenia, `repeated: true`.
+  Dzięki temu po 504 („nie wiem, czy weszło”) klient po prostu ponawia.
+- **Sprawdza to wątek silnika** spółki, więc nawet 50 równoległych powtórek składa zlecenie raz.
+- **Ten sam identyfikator z innym zleceniem → 409**, nic nie zostaje złożone — to pomyłka klienta, nie powtórka.
+- **Przetrwa restart.** Identyfikator jest zapisany na zdarzeniach zlecenia w dzienniku; po restarcie silnik
+  odbudowuje z niego pamięć powtórek (ostatnie 100 000 zleceń z identyfikatorem na spółkę). Parametrów
+  zlecenia dziennik nie przechowuje, więc po restarcie sprawdzany jest już tylko sam identyfikator.
+- **Tak trwałe jak samo zlecenie.** Po twardej awarii, która zgubiła ostatnie milisekundy dziennika, nie ma
+  ani zlecenia (arkusz odtwarza się bez niego), ani jego identyfikatora — ponowienie składa je od nowa,
+  zgodnie ze stanem giełdy.
+- **Tylko w dzienniku, nie w Kafce.** Strumień zdarzeń jest publiczny, a transakcja pokazałaby identyfikator
+  drugiej strony innemu klientowi. Klient dopasowuje zdarzenia po `orderId` z odpowiedzi.
+- Identyfikator obowiązuje w obrębie spółki; 1–64 znaki `A-Z a-z 0-9 . _ : -`. Bez niego API działa jak dawniej.
 
 Błędy w formacie RFC 9457 (`application/problem+json`). Ceny w JSON-ie to tekst
 (`"250.40"`), żeby klient w JS nie zgubił groszy w `double`. Spółki, pojemność kolejki
@@ -381,7 +408,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
 | **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza, układ na laptopie i telefonie, Swagger UI z wywołaniem endpointu; osobno demo z nagrania (bez żadnego serwera, symulowane zlecenia) |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 367/393 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 399/427 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
