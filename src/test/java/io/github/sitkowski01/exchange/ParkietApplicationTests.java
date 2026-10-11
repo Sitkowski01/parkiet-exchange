@@ -100,6 +100,9 @@ class ParkietApplicationTests {
                 .extractingPath("$[-1:].close").asArray().containsExactly("159.34"));
         assertThat(mvc.get().uri("/api/instruments/XYZ/candles")).hasStatus(HttpStatus.NOT_FOUND);
         assertThat(mvc.get().uri("/api/instruments/PKN/candles?seconds=0")).hasStatus(HttpStatus.BAD_REQUEST);
+        assertThat(mvc.get().uri("/api/instruments/PKN/candles?seconds=3600&count=24")).hasStatusOk();
+        assertThat(mvc.get().uri("/api/instruments/PKN/candles?seconds=3600&count=25")).hasStatus(HttpStatus.BAD_REQUEST)
+                .bodyJson().extractingPath("$.detail").asString().contains("24 h");
     }
 
     /** Prometheus widzi handel i stan kolejek -- nazwy jak w dashboardzie Grafany (monitoring/). */

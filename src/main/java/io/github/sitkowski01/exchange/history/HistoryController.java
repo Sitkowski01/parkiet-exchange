@@ -6,11 +6,13 @@ import io.github.sitkowski01.exchange.engine.UnknownInstrumentException;
 import io.github.sitkowski01.exchange.history.TradeHistory.Candle;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -44,6 +46,12 @@ class HistoryController {
         }
     }
 
+    /**
+     * Najdluzszy zakres jednego zapytania. Swiece liczy jeden skan dziennika po calym zakresie --
+     * bez limitu "3600 s x 1000" to 41 dni handlu w jednym zapytaniu od kogokolwiek z sieci.
+     */
+    static final Duration MAX_RANGE = Duration.ofHours(24);
+
     private final TradeHistory history;
     private final Set<String> symbols;
     private final Clock clock;
@@ -60,6 +68,10 @@ class HistoryController {
                              @RequestParam(defaultValue = "120") @Min(1) @Max(1000) int count) {
         if (!symbols.contains(symbol)) {
             throw new UnknownInstrumentException(symbol);
+        }
+        if ((long) seconds * count > MAX_RANGE.toSeconds()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "seconds x count must not exceed " + MAX_RANGE.toSeconds() + " (24 h), was " + (long) seconds * count);
         }
         return history.candles(symbol, Duration.ofSeconds(seconds), count, clock.instant()).stream()
                 .map(CandleView::of).toList();
