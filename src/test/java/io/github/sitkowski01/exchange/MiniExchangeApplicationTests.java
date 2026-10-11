@@ -8,6 +8,7 @@ import io.github.sitkowski01.exchange.persistence.JdbcEventSink;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.kafka.autoconfigure.KafkaConnectionDetails;
+import org.springframework.boot.micrometer.metrics.test.autoconfigure.AutoConfigureMetrics;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -34,6 +35,8 @@ import static org.awaitility.Awaitility.await;
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @AutoConfigureMockMvc
+// Testy domyslnie wylaczaja eksport metryk; ten sprawdza tez /actuator/prometheus.
+@AutoConfigureMetrics
 @Import({TestcontainersConfiguration.class, KafkaContainerConfiguration.class})
 class MiniExchangeApplicationTests {
 
@@ -84,6 +87,24 @@ class MiniExchangeApplicationTests {
         assertThat(context.getBeanFactory().getDependenciesForBean("matchingEngine"))
                 .contains("eventSink", "marketDataHub")
                 .doesNotContain("journal");
+    }
+
+    /** Prometheus widzi handel i stan kolejek -- nazwy jak w dashboardzie Grafany (monitoring/). */
+    @Test
+    void prometheusScrapeShowsTradingAndPipeline() throws Exception {
+        place("ALE", "{\"side\":\"SELL\",\"type\":\"LIMIT\",\"price\":\"51.75\",\"quantity\":3}");
+        place("ALE", "{\"side\":\"BUY\",\"type\":\"MARKET\",\"quantity\":3}");
+
+        String scrape = mvc.get().uri("/actuator/prometheus").exchange().getResponse().getContentAsString();
+
+        assertThat(scrape).contains(
+                "exchange_events_total{symbol=\"ALE\",type=\"TRADE\"}",
+                "exchange_last_price_pln{symbol=\"ALE\"} 51.75",
+                "exchange_engine_queue_depth{symbol=\"CDR\"}",
+                "exchange_journal_pending",
+                "exchange_outbox_lag",
+                "exchange_marketdata_clients",
+                "http_server_requests_seconds_bucket");
     }
 
     private Number place(String symbol, String body) throws Exception {
