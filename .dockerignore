@@ -1,0 +1,12 @@
+.gradle
+build
+e2e
+.git
+.github
+.githooks
+monitoring
+scripts
+docs
+src/test
+src/jmh
+*.md
