@@ -27,3 +27,65 @@ jobs:
             build/reports/tests
             build/reports/jacoco
             build/reports/pitest
+
+  # Cala gielda z obrazu (Dockerfile + compose), pusta: bez botow i bez wznowienia, zeby testy widzialy
+  # te same arkusze. Na niej testy terminala w przegladarce, potem demo z nagrania (bez serwera).
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      PARKIET_PROFILE: ""
+      PARKIET_RESUME: "false"
+      PARKIET_PORT: "8090"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Gielda w kontenerach
+        run: |
+          docker compose --profile app up -d --build
+          timeout 180 bash -c 'until curl -sf localhost:8090/actuator/health > /dev/null; do sleep 3; done'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Playwright
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: E2E na gieldzie
+        working-directory: e2e
+        run: npm test
+      - name: E2E demo z nagrania
+        working-directory: e2e
+        run: npm run test:replay
+      - name: Logi kontenerow
+        if: failure()
+        run: docker compose --profile app logs --no-color > compose.log
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: e2e
+          path: |
+            e2e/test-results
+            compose.log
+
+  # Obraz do GHCR tylko z main i tylko, gdy przeszly oba joby: docker pull dostaje sprawdzona wersje.
+  obraz:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [check, e2e]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/sitkowski01/parkiet-exchange:latest
+            ghcr.io/sitkowski01/parkiet-exchange:${{ github.sha }}
