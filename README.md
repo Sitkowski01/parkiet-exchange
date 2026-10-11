@@ -323,10 +323,15 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
 | **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); restart na prawdziwej bazie ciągnie ten sam przebieg; dziura w numeracji i niespójny dziennik zatrzymują start |
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
+| **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 332/357 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
 ./gradlew pitest    # testy mutacyjne -> build/reports/pitest
+
+# e2e: giełda bez botów, od pustego dziennika, potem Playwright (Chrome)
+./gradlew bootRun --args='--server.port=8090 --exchange.journal.resume=false'
+cd e2e && npm install && npm test
 ```
