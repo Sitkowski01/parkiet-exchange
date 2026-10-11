@@ -1,4 +1,4 @@
-# mini-exchange
+# Parkiet — silnik giełdy
 
 [![CI](https://github.com/Sitkowski01/mini-exchange/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitkowski01/mini-exchange/actions/workflows/ci.yml)
 
@@ -8,6 +8,12 @@ kojarzy je w arkuszu według **ceny, a potem czasu** — tak jak GPW — i publi
 Cena na giełdzie nie przychodzi z zewnątrz. To cena ostatniej transakcji, czyli moment,
 w którym czyjeś kupno spotkało się z czyjąś sprzedażą. Ten projekt jest źródłem notowań,
 nie ich odbiorcą.
+
+![Parkiet — terminal w przeglądarce](docs/parkiet.png)
+
+```bash
+./gradlew bootRun --args='--spring.profiles.active=demo'   # Docker; potem http://localhost:8080
+```
 
 ## Stan
 
@@ -20,7 +26,7 @@ nie ich odbiorcą.
 | 5 | Zapis poza wątkiem silnika, transactional outbox → Kafka | ✅ |
 | 6 | Notowania na żywo przez WebSocket | ✅ |
 | 7 | Boty rynkowe zakotwiczone w cenach GPW | ✅ |
-| 8 | Odtwarzanie arkusza z logu zdarzeń, metryki, benchmarki | |
+| 8 | Restart z dziennika (event sourcing), wykres ze świec, metryki, benchmarki, terminal w przeglądarce | ✅ |
 
 ## Arkusz zleceń
 
@@ -110,7 +116,7 @@ Każde zdarzenie silnika trafia do tabeli `engine_event` — w kolejności, w ja
 ```
 
 - **Paczka zdarzeń jednego zlecenia w jednej transakcji** — nigdy pół zlecenia w bazie.
-- **`run_id`** — każde uruchomienie giełdy numeruje zdarzenia od 1, więc restart nie zderza się z kluczem.
+- **`run_id`** — przebieg giełdy. Restart go kontynuuje (patrz niżej); nowy przebieg z numeracją od 1 zaczyna się tylko przy `exchange.journal.resume=false`.
 - **Schemat pilnuje kształtu wiersza** (`CHECK`): transakcja musi mieć makera i takera,
   anulowanie nie ma ceny. Migracje: Flyway ([`db/migration`](src/main/resources/db/migration)).
 - **Zapis poza wątkiem silnika.** Silnik wrzuca zdarzenia do kolejki i wraca do kojarzenia;
@@ -202,6 +208,97 @@ z konfiguracji.
 - Boty ruszają dopiero po pełnym starcie aplikacji i stają jako pierwsze przy zamykaniu.
 - Domyślnie wyłączone: bez profilu `demo` w arkuszu jest tylko to, co złożą klienci.
 
+## Restart bez utraty arkusza (event sourcing)
+
+Arkusz żyje w pamięci, ale nie ma osobnej tabeli „zlecenia w arkuszu”. Stan to suma zdarzeń
+z dziennika — po restarcie giełda odtwarza go, zamiast go wczytywać:
+
+```
+engine_event (ostatni run, spółka, sequence 1..n) ──► OrderBook.Rebuilder ──► arkusz + numer n
+                                                                         └─► silnik numeruje dalej od n+1
+```
+
+- **Zdarzenia to fakty, nie polecenia.** Odtwarzanie nie kojarzy zleceń jeszcze raz, tylko nakłada
+  skutki: `RESTED` dokłada zlecenie na koniec kolejki ceny (priorytet czasu zostaje), `TRADE`
+  zmniejsza zlecenie czekające, `CANCELLED` je zdejmuje.
+- **Ciągłość po restarcie.** Ten sam `run_id`, kolejne `sequence` i id zleceń — klient może anulować
+  zlecenie złożone przed restartem, a odbiorca Kafki nie widzi żadnej zmiany.
+- **Niespójny dziennik = giełda nie wstaje.** Dziura w numeracji albo transakcja na nieznanym
+  zleceniu zatrzymuje start. Lepiej nie handlować niż handlować na złym arkuszu.
+- **Strumieniowo.** Kursor po stronie bazy, zdarzenie po zdarzeniu — 200 tys. zdarzeń odtwarza się
+  w ok. 2 s i nie musi mieścić się w pamięci naraz.
+- **Uczciwie o granicy:** zapis jest asynchroniczny, więc po twardej awarii (kill -9) mogą przepaść
+  ostatnie milisekundy pracy, które klient zdążył zobaczyć jako przyjęte. Arkusz odtwarza się wtedy
+  spójnie do ostatniego zapisanego zdarzenia. Zwykłe zamknięcie zapisuje wszystko.
+
+Test różnicowy sprawdza, że arkusz odbudowany z 5000 losowych zdarzeń jest nieodróżnialny od oryginału —
+także w kolejnych 2000 zleceniach, czyli w priorytecie czasu, którego nie widać w samej głębokości.
+
+## Terminal w przeglądarce
+
+`http://localhost:8080` — strona serwowana przez samą aplikację (czysty JS, bez frameworka i bez kroku budowania):
+
+- kafelki spółek z ceną, zmianą i wykresem z ostatnich 30 minut,
+- wykres świecowy rysowany na canvasie (5 s / 15 s / 1 min), z wolumenem i krzyżem OHLC,
+- arkusz z głębokością skumulowaną; klik w poziom wpisuje cenę do formularza,
+- formularz zlecenia (limit / PKC) i „moje zlecenia” z anulowaniem — kropka w arkuszu pokazuje własne zlecenia,
+- taśma transakcji i dziennik zdarzeń z numerami `sequence`.
+
+Ceny w przeglądarce też są liczone w groszach na liczbach całkowitych, a komunikaty błędów pochodzą
+prosto z `ProblemDetail` serwera.
+
+**Historia do wykresu idzie z dziennika, nie z silnika** (`GET /api/instruments/CDR/candles?seconds=5&count=120`).
+Świece liczy jedno zapytanie SQL (`date_bin` + `array_agg ... order by id`), więc wykres nie zabiera czasu
+wątkowi, który kojarzy zlecenia, a po restarcie historia jest ta sama. To mały CQRS: zapis przez silnik,
+odczyt historii prosto z bazy.
+
+## Metryki (Prometheus + Grafana)
+
+```bash
+docker compose --profile monitoring up -d    # Grafana: http://localhost:3000, dashboard „Parkiet”
+```
+
+Każda metryka odpowiada na pytanie „gdzie się korkuje”:
+
+```
+HTTP ──► [kolejka silnika] ──► silnik ──► [kolejka zapisu] ──► Postgres ──► [lag outboxa] ──► Kafka
+         exchange_engine_queue_depth      exchange_journal_pending           exchange_outbox_lag
+```
+
+Plus transakcje/s, obrót i ostatnia cena na spółkę, p50/p99 czasu odpowiedzi API, klienci WebSocket
+i zgubione paczki notowań. Klasy silnika nie znają Micrometera (pilnuje tego ArchUnit) — wystawiają
+zwykłe gettery, mierniki podpina `MetricsConfig`.
+
+## Wydajność
+
+**Rdzeń (JMH, `./gradlew jmh`)** — sam arkusz i silnik, bez sieci i bazy:
+
+| Pomiar | Wynik |
+|---|---|
+| sam arkusz: zlecenie + anulowanie (mieszanka LIMIT/MARKET) | 3,3 mln zleceń/s |
+| silnik, 1 spółka, klient wysyła paczki po 100 zleceń | 0,86 mln zleceń/s |
+| silnik, 6 spółek z 6 wątków — spółki skalują się niezależnie | 2,5 mln zleceń/s |
+| silnik, 4 klientów czekających na każdą odpowiedź | 110 tys. zleceń/s |
+| czas „tam i z powrotem” jednego zlecenia | 44 µs |
+
+Laptop z Windows, `-f 2 -wi 3 -i 5`; surowe wyniki: `build/reports/jmh/results.json`. Różnica między
+paczkami a czekaniem na każdą odpowiedź to koszt budzenia wątku, nie kojarzenia.
+
+
+**Cała droga HTTP → silnik → Postgres → Kafka (k6, `scripts/k6/orders.js`)** — laptop, Postgres, Kafka
+i k6 w Docker Desktop na tej samej maszynie, boty handlują w tle:
+
+| Tempo | p50 | p95 | Kolejka zapisu (max) |
+|---|---|---|---|
+| 1000 zleceń/s (+ anulowania) | 2,5 ms | 8 ms | 18 paczek |
+| 2000 zleceń/s | 21 ms | 240 ms | 10 000 (pełna) |
+
+Silnik kojarzy miliony zleceń na sekundę, a całość utrzymuje ok. 1–1,5 tys./s — **ograniczeniem jest
+zapis do Postgresa w Dockerze**, nie kojarzenie. Widać to w metrykach: przy 2000/s kolejka zapisu
+dobija do limitu i backpressure spowalnia silnik, zamiast gubić zdarzenia. Pierwszy przebieg pokazał
+też tańszy problem: sterownik wysyłał paczkę insertów jako osobne polecenia — `reWriteBatchedInserts`
+skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jednego błędu.
+
 ## Testy
 
 | Rodzaj | Co sprawdza |
@@ -217,8 +314,10 @@ z konfiguracji.
 | Outboxa | kolejność i format wiadomości, awaria brokera w połowie paczki, brak potwierdzeń, wolny broker w limicie czasu, drugi relay nie wysyła równolegle |
 | Notowań | wolny klient rozłączany bez blokowania innych, pełna kolejka huba gubi paczkę zamiast zatrzymać silnik, obraz arkusza tylko dla spółek z widzami, limit klientów; plus prawdziwe gniazdo: obraz → transakcja → nowy obraz |
 | Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
-| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK, API nie zna bazy ani brokera |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API i notowań i sprawdza, czy testy to zauważą. Wynik: 228/243 (ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
+| **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); restart na prawdziwej bazie ciągnie ten sam przebieg; dziura w numeracji i niespójny dziennik zatrzymują start |
+| Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
+| Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 332/357 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
