@@ -1,0 +1,64 @@
+{
+  "uid": "parkiet",
+  "title": "Parkiet",
+  "tags": ["exchange"],
+  "timezone": "browser",
+  "refresh": "5s",
+  "time": { "from": "now-15m", "to": "now" },
+  "schemaVersion": 41,
+  "panels": [
+    {
+      "type": "timeseries", "title": "Transakcje / s", "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "ops", "custom": { "stacking": { "mode": "normal" }, "fillOpacity": 30 } } },
+      "targets": [{ "expr": "sum by (symbol) (rate(exchange_events_total{type=\"TRADE\"}[30s]))", "legendFormat": "{{symbol}}" }]
+    },
+    {
+      "type": "timeseries", "title": "Czas odpowiedzi API (p50 / p99)", "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "s" } },
+      "targets": [
+        { "expr": "histogram_quantile(0.5, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/instruments/{symbol}/orders\"}[1m])))", "legendFormat": "p50 zlecenia" },
+        { "expr": "histogram_quantile(0.99, sum by (le) (rate(http_server_requests_seconds_bucket{uri=\"/api/instruments/{symbol}/orders\"}[1m])))", "legendFormat": "p99 zlecenia" }
+      ]
+    },
+    {
+      "type": "timeseries", "title": "Kolejka silnika (polecenia czekajace)", "gridPos": { "x": 0, "y": 8, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "exchange_engine_queue_depth", "legendFormat": "{{symbol}}" }]
+    },
+    {
+      "type": "timeseries", "title": "Zapis do bazy: paczki w kolejce", "gridPos": { "x": 8, "y": 8, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "exchange_journal_pending", "legendFormat": "event-writer" }]
+    },
+    {
+      "type": "timeseries", "title": "Outbox: zdarzenia jeszcze nie w Kafce", "gridPos": { "x": 16, "y": 8, "w": 8, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [{ "expr": "exchange_outbox_lag", "legendFormat": "lag" }]
+    },
+    {
+      "type": "stat", "title": "Ostatnia cena", "gridPos": { "x": 0, "y": 15, "w": 12, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "currencyPLN", "decimals": 2 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "graphMode": "area" },
+      "targets": [{ "expr": "exchange_last_price_pln", "legendFormat": "{{symbol}}" }]
+    },
+    {
+      "type": "stat", "title": "Obrót (15 min)", "gridPos": { "x": 12, "y": 15, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": { "defaults": { "unit": "currencyPLN" } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [{ "expr": "sum(increase(exchange_traded_value_pln_total[15m]))" }]
+    },
+    {
+      "type": "stat", "title": "Klienci WebSocket / zgubione paczki notowań", "gridPos": { "x": 18, "y": 15, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "targets": [
+        { "expr": "exchange_marketdata_clients", "legendFormat": "klienci" },
+        { "expr": "exchange_marketdata_dropped", "legendFormat": "zgubione" }
+      ]
+    }
+  ]
+}
