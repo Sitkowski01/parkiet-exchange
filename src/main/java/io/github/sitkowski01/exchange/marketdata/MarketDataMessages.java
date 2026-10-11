@@ -14,6 +14,9 @@ import java.util.List;
  * Wiadomosci strumienia notowan. Ceny jako tekst w zlotowkach, jak w REST API -- odbiorca
  * to przegladarka, a JavaScript zgubilby grosze w double.
  *
+ * <p>Numery zlecen w transakcji pozwalaja klientowi zauwazyc, ze jego zlecenie czekajace w arkuszu
+ * wlasnie sie zrealizowalo (gielda nie ma kont, wiec nie ma tez prywatnego kanalu z realizacjami).
+ *
  * <p>{@code sequence} pozwala zszyc obraz arkusza ze zmianami: klient odrzuca kazde
  * zdarzenie o numerze nie wiekszym niz w ostatnim obrazie, bo ten juz je uwzglednia.
  */
@@ -31,7 +34,7 @@ final class MarketDataMessages {
     }
 
     record Trade(String type, String symbol, long sequence, Instant timestamp, String price, long quantity,
-                 String takerSide) {
+                 String takerSide, long makerOrderId, long takerOrderId) {
     }
 
     static String book(BookSnapshot snapshot) {
@@ -41,7 +44,8 @@ final class MarketDataMessages {
 
     static String trade(EngineEvent event, BookEvent.Trade trade) {
         return JSON.writeValueAsString(new Trade("trade", event.symbol(), event.sequence(), event.timestamp(),
-                zloty(trade.price()), trade.quantity(), trade.takerSide().name()));
+                zloty(trade.price()), trade.quantity(), trade.takerSide().name(),
+                trade.makerOrderId(), trade.takerOrderId()));
     }
 
     private static List<Level> levels(List<PriceLevel> levels) {

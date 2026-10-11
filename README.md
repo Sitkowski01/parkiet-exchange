@@ -163,7 +163,7 @@ ws://localhost:8080/ws/market?symbols=CDR,PKO
 
 ```json
 {"type":"book","symbol":"CDR","sequence":41,"bids":[{"price":"250.30","quantity":12,"orders":2}],"asks":[...]}
-{"type":"trade","symbol":"CDR","sequence":42,"timestamp":"2026-10-09T14:03:11.512Z","price":"250.40","quantity":4,"takerSide":"BUY"}
+{"type":"trade","symbol":"CDR","sequence":42,"timestamp":"2026-10-09T14:03:11.512Z","price":"250.40","quantity":4,"takerSide":"BUY","makerOrderId":1,"takerOrderId":2}
 ```
 
 - Po podłączeniu klient dostaje **obraz arkusza** każdej spółki, potem **transakcje na bieżąco**

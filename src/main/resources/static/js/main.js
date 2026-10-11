@@ -3,7 +3,7 @@ import { NAMES, compact, percent, price, time } from "./format.js";
 import { api, candles, stream } from "./market.js";
 import { CandleChart } from "./chart.js";
 import { Strip, pushTrade, renderBook } from "./panels.js";
-import { log, myPrices, renderOrders, ticket } from "./trading.js";
+import { fill, log, myPrices, renderOrders, ticket } from "./trading.js";
 
 const SPARK_SECONDS = 30, SPARK_COUNT = 60; // mini-wykresy: ostatnie 30 minut
 const $ = (id) => document.getElementById(id);
@@ -100,6 +100,7 @@ stream(symbols, {
     list.push(t);
     if (list.length > 40) list.shift();
     strip.trade(t.symbol, t.t, t.price, t.quantity);
+    if (fill(t.symbol, t.maker, t.quantity) && t.symbol === selected) drawBook();
     log({ type: "TRADE", symbol: t.symbol, sequence: t.sequence, quantity: t.quantity, price: price(t.price), takerSide: t.side });
     if (t.symbol === selected) {
       chart.trade(t.t, t.price, t.quantity);
