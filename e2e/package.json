@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "playwright test"
+    "test": "playwright test --config playwright.config.js",
+    "test:replay": "playwright test --config playwright.replay.config.js"
   },
   "devDependencies": {
     "@playwright/test": "1.64.0"

@@ -6,6 +6,7 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "tests",
+  testIgnore: "replay.spec.js",
   timeout: 20_000,
   // Testy dziela jedna gielde -- kazdy handluje na innej spolce, ale kolejno, bez wyscigow.
   workers: 1,
