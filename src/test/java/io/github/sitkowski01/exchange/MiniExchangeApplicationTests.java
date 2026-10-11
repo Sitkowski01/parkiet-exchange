@@ -89,6 +89,19 @@ class MiniExchangeApplicationTests {
                 .doesNotContain("journal");
     }
 
+    /** Wykres czyta swiece z dziennika: transakcja z HTTP pojawia sie w nich po zapisie do bazy. */
+    @Test
+    void tradesShowUpAsCandles() throws Exception {
+        place("PKN", "{\"side\":\"SELL\",\"type\":\"LIMIT\",\"price\":\"159.34\",\"quantity\":7}");
+        place("PKN", "{\"side\":\"BUY\",\"type\":\"MARKET\",\"quantity\":7}");
+
+        await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(mvc.get()
+                .uri("/api/instruments/PKN/candles?seconds=60&count=5")).hasStatusOk().bodyJson()
+                .extractingPath("$[-1:].close").asArray().containsExactly("159.34"));
+        assertThat(mvc.get().uri("/api/instruments/XYZ/candles")).hasStatus(HttpStatus.NOT_FOUND);
+        assertThat(mvc.get().uri("/api/instruments/PKN/candles?seconds=0")).hasStatus(HttpStatus.BAD_REQUEST);
+    }
+
     /** Prometheus widzi handel i stan kolejek -- nazwy jak w dashboardzie Grafany (monitoring/). */
     @Test
     void prometheusScrapeShowsTradingAndPipeline() throws Exception {
