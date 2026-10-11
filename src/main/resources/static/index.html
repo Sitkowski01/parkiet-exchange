@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Parkiet — silnik giełdy</title>
+  <meta name="description" content="Parkiet: silnik giełdy w Javie 21 — arkusz zleceń, kojarzenie cena–czas, notowania na żywo.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/panels.css">
+  <script type="module" src="js/main.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="/" aria-label="Parkiet">
+    <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+      <path d="M4 12 10 6l6 6-6 6z" /><path d="M16 12l6-6 6 6-6 6z" /><path d="M10 18l6-6 6 6-6 6z" opacity=".55" />
+    </svg>
+    <span class="brand-name">Parkiet</span>
+    <span class="brand-sub">silnik giełdy</span>
+  </a>
+  <div class="status" id="status">
+    <span class="dot"></span><span class="status-text">łączenie…</span>
+  </div>
+  <dl class="vitals">
+    <div><dt>transakcji/s</dt><dd id="rate">—</dd></div>
+    <div><dt>obrót od wejścia</dt><dd id="turnover">0 zł</dd></div>
+    <div><dt>czas</dt><dd id="clock">—</dd></div>
+  </dl>
+</header>
+
+<nav class="strip" id="strip" aria-label="Spółki"></nav>
+
+<main class="desk">
+  <section class="panel chart-panel">
+    <div class="instrument">
+      <div class="instrument-id">
+        <h1 id="inst-symbol">—</h1>
+        <span id="inst-name" class="muted"></span>
+      </div>
+      <div class="instrument-price">
+        <span id="inst-last" class="big-price">—</span>
+        <span id="inst-change" class="change"></span>
+      </div>
+      <dl class="instrument-stats">
+        <div><dt>max</dt><dd id="inst-high">—</dd></div>
+        <div><dt>min</dt><dd id="inst-low">—</dd></div>
+        <div><dt>wolumen</dt><dd id="inst-volume">—</dd></div>
+        <div><dt>spread</dt><dd id="inst-spread">—</dd></div>
+      </dl>
+    </div>
+    <div class="chart-wrap">
+      <div class="segmented intervals" id="intervals" role="group" aria-label="Interwał świec">
+        <button data-seconds="5" class="on">5s</button>
+        <button data-seconds="15">15s</button>
+        <button data-seconds="60">1m</button>
+      </div>
+      <canvas id="chart"></canvas>
+      <div class="chart-empty" id="chart-empty" hidden>
+        Brak transakcji. Złóż zlecenie albo uruchom giełdę z profilem <code>demo</code>.
+      </div>
+    </div>
+  </section>
+
+  <section class="panel book-panel">
+    <header class="panel-head"><h2>Arkusz zleceń</h2><span class="muted mono" id="book-seq"></span></header>
+    <div class="book-cols"><span>cena</span><span>ilość</span><span>suma</span></div>
+    <div class="book-side asks" id="asks"></div>
+    <div class="spread-row" id="spread-row"><span id="mid">—</span><span class="muted" id="spread-bps"></span></div>
+    <div class="book-side bids" id="bids"></div>
+  </section>
+
+  <section class="panel ticket-panel">
+    <form id="ticket" autocomplete="off">
+      <div class="side-toggle" role="group" aria-label="Strona">
+        <button type="button" data-side="BUY" class="on buy">Kupno</button>
+        <button type="button" data-side="SELL" class="sell">Sprzedaż</button>
+      </div>
+      <div class="segmented small" role="group" aria-label="Typ zlecenia">
+        <button type="button" data-type="LIMIT" class="on">Limit</button>
+        <button type="button" data-type="MARKET">PKC</button>
+      </div>
+      <label class="field" id="price-field">
+        <span>Limit ceny</span>
+        <input id="price" inputmode="decimal" placeholder="0,00"><em>zł</em>
+      </label>
+      <label class="field">
+        <span>Ilość</span>
+        <input id="quantity" inputmode="numeric" value="10"><em>szt.</em>
+      </label>
+      <div class="quick" id="quick">
+        <button type="button" data-q="1">1</button><button type="button" data-q="10">10</button>
+        <button type="button" data-q="50">50</button><button type="button" data-q="100">100</button>
+      </div>
+      <div class="estimate"><span>Wartość</span><strong id="estimate">—</strong></div>
+      <button class="submit buy" id="submit" type="submit">Kup</button>
+      <p class="ticket-note" id="ticket-note" role="status"></p>
+    </form>
+  </section>
+
+  <section class="panel tape-panel">
+    <header class="panel-head"><h2>Transakcje</h2><span class="muted">na żywo</span></header>
+    <div class="tape-cols"><span>czas</span><span>cena</span><span>ilość</span></div>
+    <ol class="tape" id="tape"></ol>
+  </section>
+
+  <section class="panel log-panel">
+    <header class="panel-head tabs" role="tablist">
+      <button role="tab" class="on" data-tab="orders">Moje zlecenia <span id="orders-count" class="pill">0</span></button>
+      <button role="tab" data-tab="events">Dziennik zdarzeń</button>
+    </header>
+    <div class="tab-body" id="tab-orders"><table class="orders"><thead><tr>
+      <th>#</th><th>spółka</th><th>strona</th><th>typ</th><th>cena</th><th>ilość</th><th>stan</th><th></th>
+    </tr></thead><tbody id="orders"></tbody></table>
+      <p class="empty" id="orders-empty">Zlecenia złożone z tej przeglądarki pojawią się tutaj.</p>
+    </div>
+    <div class="tab-body" id="tab-events" hidden><ol class="events mono" id="events"></ol></div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>Java 21 · Spring Boot 4 · PostgreSQL · Kafka · WebSocket</span>
+  <span class="muted">Ceny startowe z GPW, ruch generują boty. To nie jest porada inwestycyjna.</span>
+  <a href="https://github.com/Sitkowski01/mini-exchange" rel="noopener">GitHub ↗</a>
+</footer>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
