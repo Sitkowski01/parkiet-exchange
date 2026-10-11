@@ -49,7 +49,7 @@ class MarketDataHubTest {
 
         await().untilAsserted(() -> assertThat(cdr.sent).containsExactly(
                 "{\"type\":\"trade\",\"symbol\":\"CDR\",\"sequence\":7,\"timestamp\":\"2026-10-09T10:00:00Z\","
-                        + "\"price\":\"101.25\",\"quantity\":3,\"takerSide\":\"BUY\"}"));
+                        + "\"price\":\"101.25\",\"quantity\":3,\"takerSide\":\"BUY\",\"makerOrderId\":1,\"takerOrderId\":2}"));
         assertThat(pko.sent).isEmpty();
     }
 

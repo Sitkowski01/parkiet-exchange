@@ -49,7 +49,7 @@ export function stream(symbols, { onBook, onTrade, onStatus }) {
       } else if (msg.type === "trade") {
         onTrade({
           symbol: msg.symbol, sequence: msg.sequence, t: Date.parse(msg.timestamp),
-          price: toGrosze(msg.price), quantity: msg.quantity, side: msg.takerSide,
+          price: toGrosze(msg.price), quantity: msg.quantity, side: msg.takerSide, maker: msg.makerOrderId,
         });
       }
     };

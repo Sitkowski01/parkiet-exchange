@@ -4,6 +4,8 @@ import { api } from "./market.js";
 import { el, money, price, qty, toApi, toGrosze } from "./format.js";
 
 const KEY = "parkiet.orders";
+// Czeka w arkuszu: cale (resting) albo z czesci zrealizowane (partial). Tylko takie mozna anulowac.
+const ACTIVE = new Set(["resting", "partial"]);
 const LABEL = { resting: "w arkuszu", filled: "zrealizowane", partial: "częściowo", cancelled: "anulowane", gone: "nieaktywne" };
 let orders = load();
 
@@ -16,19 +18,19 @@ function save() {
 
 /** Ceny moich zlecen czekajacych w arkuszu spolki -- arkusz zaznacza je kropka. */
 export function myPrices(symbol) {
-  return new Set(orders.filter((o) => o.symbol === symbol && o.state === "resting").map((o) => o.price));
+  return new Set(orders.filter((o) => o.symbol === symbol && ACTIVE.has(o.state)).map((o) => o.price));
 }
 
 export function renderOrders() {
-  document.getElementById("orders-count").textContent = orders.filter((o) => o.state === "resting").length;
+  document.getElementById("orders-count").textContent = orders.filter((o) => ACTIVE.has(o.state)).length;
   document.getElementById("orders-empty").hidden = orders.length > 0;
   document.getElementById("orders").replaceChildren(...orders.map((o) => el("tr", {},
     el("td", { class: "muted" }, o.id), el("td", {}, o.symbol),
     el("td", { class: o.side === "BUY" ? "up" : "down" }, o.side === "BUY" ? "kupno" : "sprzedaż"),
     el("td", {}, o.type === "MARKET" ? "PKC" : "limit"),
-    el("td", {}, o.price ? price(o.price) : "—"), el("td", {}, qty(o.quantity)),
+    el("td", {}, o.price ? price(o.price) : "—"), el("td", {}, ACTIVE.has(o.state) && o.remaining < o.quantity ? `${qty(o.remaining)} z ${qty(o.quantity)}` : qty(o.quantity)),
     el("td", {}, el("span", { class: `state ${o.state}` }, LABEL[o.state])),
-    el("td", {}, o.state === "resting" ? el("button", { class: "cancel", onclick: () => cancel(o) }, "anuluj") : ""))));
+    el("td", {}, ACTIVE.has(o.state) ? el("button", { class: "cancel", onclick: () => cancel(o) }, "anuluj") : ""))));
 }
 
 async function cancel(order) {
@@ -42,6 +44,19 @@ async function cancel(order) {
     toast(e.status === 404 ? "Zlecenie już zrealizowane" : e.message, "err");
   }
   save(); renderOrders(); onChange();
+}
+
+/**
+ * Transakcja ze strumienia: jesli maker to moje zlecenie z arkusza, ubywa mu ilosci. Strona aktywna
+ * (taker) jest juz policzona z odpowiedzi na POST.
+ */
+export function fill(symbol, makerOrderId, quantity) {
+  const order = orders.find((o) => o.id === makerOrderId && o.symbol === symbol && ACTIVE.has(o.state));
+  if (!order) return false;
+  order.remaining = Math.max(0, (order.remaining ?? order.quantity) - quantity);
+  order.state = order.remaining === 0 ? "filled" : "partial";
+  save(); renderOrders();
+  return true;
 }
 
 let onChange = () => {};
@@ -83,7 +98,7 @@ export function ticket(getSymbol, getBook, changed) {
       const filled = res.events.filter((ev) => ev.type === "TRADE").reduce((a, ev) => a + ev.quantity, 0);
       const rested = res.events.find((ev) => ev.type === "RESTED");
       orders.unshift({ id: res.orderId, symbol, side: state.side, type: state.type, price: state.type === "LIMIT" ? p : null,
-        quantity: n, state: rested ? "resting" : filled ? "filled" : "gone" });
+        quantity: n, remaining: rested ? rested.quantity : 0, state: rested ? (filled ? "partial" : "resting") : filled ? "filled" : "gone" });
       res.events.forEach((ev) => log({ ...ev, symbol }));
       toast(describe(res, filled, rested), "ok");
       save(); renderOrders(); changed();
