@@ -32,8 +32,12 @@ Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · Microm
 JUnit · Testcontainers · PIT · ArchUnit · JMH · k6 · Playwright
 
 ```bash
-./gradlew bootRun --args='--spring.profiles.active=demo'   # Docker; potem http://localhost:8080
+docker compose --profile app up --build    # sam Docker: giełda z botami, Postgres, Kafka -> http://localhost:8080
+./gradlew bootRun --args='--spring.profiles.active=demo'   # albo z JDK 21; bazę i brokera podnosi sam
 ```
+
+Obraz z każdego zielonego `main` trafia do `ghcr.io/sitkowski01/parkiet-exchange`. CI uruchamia na nim
+testy e2e, więc w rejestrze jest tylko wersja, która przeszła wszystkie testy.
 
 <details>
 <summary><b>In English</b></summary>
@@ -369,8 +373,8 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
 ./gradlew pitest    # testy mutacyjne -> build/reports/pitest
 
-# e2e: giełda bez botów, od pustego dziennika, potem Playwright (Chrome)
-./gradlew bootRun --args='--server.port=8090 --exchange.journal.resume=false'
+# e2e: giełda bez botów, od pustego dziennika (tak samo w CI), potem Playwright
+PARKIET_PROFILE= PARKIET_RESUME=false PARKIET_PORT=8090 docker compose --profile app up -d --build
 cd e2e && npm install && npm test
 npm run test:replay   # demo z nagrania: bez giełdy, statyczna paczka i przewidywalne nagranie
 ```
