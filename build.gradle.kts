@@ -29,6 +29,8 @@ dependencies {
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.springframework.boot:spring-boot-starter-kafka")
 	implementation("io.micrometer:micrometer-registry-prometheus")
+	// Opis API (OpenAPI 3) z kontrolerow + Swagger UI pod /swagger-ui.html
+	implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1")
 	runtimeOnly("org.postgresql:postgresql")
 	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")

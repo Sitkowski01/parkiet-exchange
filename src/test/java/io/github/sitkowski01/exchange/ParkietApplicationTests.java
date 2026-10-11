@@ -105,6 +105,21 @@ class ParkietApplicationTests {
                 .bodyJson().extractingPath("$.detail").asString().contains("24 h");
     }
 
+    /** Opis API z kontrolerow: wszystkie endpointy, kody bledow, ceny jako tekst -- jak w prawdziwych odpowiedziach. */
+    @Test
+    void openApiDescribesTheRealContract() {
+        var docs = assertThat(mvc.get().uri("/v3/api-docs")).hasStatusOk().bodyJson();
+        docs.extractingPath("$.paths").asMap().containsKeys("/api/instruments", "/api/instruments/{symbol}/orders",
+                "/api/instruments/{symbol}/orders/{orderId}", "/api/instruments/{symbol}/book",
+                "/api/instruments/{symbol}/candles");
+        docs.extractingPath("$.paths['/api/instruments/{symbol}/orders'].post.responses").asMap()
+                .containsKeys("201", "400", "404", "503", "504");
+        docs.extractingPath("$.components.schemas.LevelView.properties.price.type").isEqualTo("string");
+        docs.extractingPath("$.components.schemas.PlaceOrderRequest.required").asArray()
+                .containsExactlyInAnyOrder("side", "type", "quantity");
+        assertThat(mvc.get().uri("/swagger-ui/index.html")).hasStatusOk();
+    }
+
     /** Prometheus widzi handel i stan kolejek -- nazwy jak w dashboardzie Grafany (monitoring/). */
     @Test
     void prometheusScrapeShowsTradingAndPipeline() throws Exception {
