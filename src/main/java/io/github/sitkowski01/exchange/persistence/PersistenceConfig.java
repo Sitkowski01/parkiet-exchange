@@ -11,6 +11,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import javax.sql.DataSource;
+import java.sql.SQLException;
 import java.time.Duration;
 
 /**
@@ -37,6 +39,12 @@ class PersistenceConfig {
         return new EventJournal(jdbc, tx);
     }
 
+    /** Pierwsza rzecz przed odczytem dziennika: druga gielda na tej samej bazie nie wystartuje. */
+    @Bean(destroyMethod = "close")
+    ExchangeLock exchangeLock(DataSource dataSource) throws SQLException {
+        return ExchangeLock.acquire(dataSource);
+    }
+
     @Bean
     SnapshotStore snapshotStore(JdbcTemplate jdbc) {
         return new SnapshotStore(jdbc);
@@ -47,7 +55,8 @@ class PersistenceConfig {
      * {@code exchange.journal.resume=false} -- zawsze nowy przebieg z pustymi arkuszami.
      */
     @Bean
-    StartingState startingState(EventJournal journal, SnapshotStore snapshots, ExchangeProperties exchange,
+    StartingState startingState(ExchangeLock lock, EventJournal journal, SnapshotStore snapshots,
+                                ExchangeProperties exchange,
                                 @Value("${exchange.journal.resume:true}") boolean resume) {
         return resume ? JournalRecovery.recover(journal, snapshots, exchange.symbols()) : StartingState.fresh();
     }
