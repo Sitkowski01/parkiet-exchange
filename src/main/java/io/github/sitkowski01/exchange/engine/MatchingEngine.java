@@ -19,6 +19,12 @@ public final class MatchingEngine implements AutoCloseable {
     private final Map<String, InstrumentEngine> instruments;
 
     public MatchingEngine(List<String> symbols, int queueCapacity, Clock clock, EventSink sink) {
+        this(symbols, queueCapacity, clock, sink, Map.of());
+    }
+
+    /** @param initial stan startowy spolek (np. z dziennika); spolki spoza mapy zaczynaja od pustego arkusza */
+    public MatchingEngine(List<String> symbols, int queueCapacity, Clock clock, EventSink sink,
+                          Map<String, InstrumentState> initial) {
         if (queueCapacity <= 0) {
             throw new IllegalArgumentException("queue capacity must be positive, was " + queueCapacity);
         }
@@ -30,7 +36,8 @@ public final class MatchingEngine implements AutoCloseable {
         Map<String, InstrumentEngine> started = new LinkedHashMap<>();
         try {
             for (String symbol : symbols) {
-                started.put(symbol, InstrumentEngine.start(symbol, queueCapacity, clock, sink));
+                started.put(symbol, InstrumentEngine.start(symbol, queueCapacity, clock, sink,
+                        initial.getOrDefault(symbol, InstrumentState.empty())));
             }
         } catch (RuntimeException | Error e) {
             started.values().forEach(InstrumentEngine::close);

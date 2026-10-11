@@ -50,10 +50,12 @@ public final class InstrumentEngine implements AutoCloseable {
     private boolean accepting = true;
 
     // Stan ponizej nalezy wylacznie do watku silnika.
-    private final OrderBook book = new OrderBook();
+    private final OrderBook book;
     private long sequence;
 
-    private InstrumentEngine(String symbol, int queueCapacity, Clock clock, EventSink sink) {
+    private InstrumentEngine(String symbol, int queueCapacity, Clock clock, EventSink sink, InstrumentState state) {
+        this.book = state.book();
+        this.sequence = state.sequence();
         this.symbol = Objects.requireNonNull(symbol, "symbol");
         this.queue = new ArrayBlockingQueue<>(queueCapacity);
         this.clock = Objects.requireNonNull(clock, "clock");
@@ -62,7 +64,16 @@ public final class InstrumentEngine implements AutoCloseable {
     }
 
     public static InstrumentEngine start(String symbol, int queueCapacity, Clock clock, EventSink sink) {
-        InstrumentEngine engine = new InstrumentEngine(symbol, queueCapacity, clock, sink);
+        return start(symbol, queueCapacity, clock, sink, InstrumentState.empty());
+    }
+
+    /**
+     * Start od podanego stanu (np. odtworzonego z dziennika). Arkusz przechodzi na wlasnosc silnika:
+     * od tej chwili dotyka go wylacznie jego watek, wiec wolajacy nie moze go juz uzywac.
+     */
+    public static InstrumentEngine start(String symbol, int queueCapacity, Clock clock, EventSink sink,
+                                         InstrumentState state) {
+        InstrumentEngine engine = new InstrumentEngine(symbol, queueCapacity, clock, sink, state);
         engine.thread.start();
         return engine;
     }
