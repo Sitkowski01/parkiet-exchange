@@ -44,7 +44,7 @@ class JdbcEventSinkTest {
 
     @BeforeEach
     void clean() {
-        jdbc.execute("truncate engine_event, engine_run");
+        jdbc.execute("truncate engine_event, book_snapshot, engine_run");
     }
 
     @Test
