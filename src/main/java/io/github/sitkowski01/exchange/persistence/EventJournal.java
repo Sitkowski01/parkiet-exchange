@@ -90,11 +90,6 @@ public final class EventJournal {
         return last == null ? 0 : last;
     }
 
-    /** Caly przebieg spolki od pierwszego zdarzenia. */
-    public void replay(long runId, String symbol, Consumer<EngineEvent> consumer) {
-        replay(runId, symbol, 0, consumer);
-    }
-
     /**
      * Przekazuje po kolei zdarzenia spolki z danego przebiegu o numerze wiekszym niz {@code afterSequence}
      * (0 = od poczatku; po migawce -- tylko to, co przyszlo po niej), w kolejnosci {@code sequence}.

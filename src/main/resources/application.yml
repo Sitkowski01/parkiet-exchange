@@ -55,6 +55,8 @@ exchange:
     # Po restarcie: arkusze odtworzone z dziennika ostatniego przebiegu (event sourcing), numeracja
     # zdarzen i id zlecen ciagna sie dalej. false = kazdy start od pustych arkuszy.
     resume: true
+    # Migawka arkusza kazdej zmienionej spolki: start czyta najnowsza i dociaga tylko zdarzenia po niej.
+    snapshot-interval: 1m
   outbox:
     poll-interval: 100ms
     batch-size: 500
