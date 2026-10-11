@@ -51,10 +51,12 @@ public final class InstrumentEngine implements AutoCloseable {
 
     // Stan ponizej nalezy wylacznie do watku silnika.
     private final OrderBook book;
+    private final ClientOrders clientOrders;
     private long sequence;
 
     private InstrumentEngine(String symbol, int queueCapacity, Clock clock, EventSink sink, InstrumentState state) {
         this.book = state.book();
+        this.clientOrders = state.clientOrders();
         this.sequence = state.sequence();
         this.symbol = Objects.requireNonNull(symbol, "symbol");
         this.queue = new ArrayBlockingQueue<>(queueCapacity);
@@ -88,14 +90,37 @@ public final class InstrumentEngine implements AutoCloseable {
     }
 
     public CompletableFuture<OrderResult> place(Side side, OrderType type, long price, long quantity) {
+        return place(null, side, type, price, quantity);
+    }
+
+    /**
+     * @param clientOrderId identyfikator nadany przez klienta albo {@code null}. Gdy silnik juz go zna,
+     *                      zwraca pierwotny wynik ({@link OrderResult#repeated()}) i niczego nie zmienia:
+     *                      powtorka po timeoucie nie zlozy drugiego zlecenia. Sprawdza to watek silnika,
+     *                      wiec dwie rownolegle powtorki tez nie przejda obie. Te same id z innymi
+     *                      parametrami konczy sie {@link ClientOrderIdConflictException}.
+     */
+    public CompletableFuture<OrderResult> place(ClientOrderId clientOrderId, Side side, OrderType type,
+                                                long price, long quantity) {
         return submit(() -> {
+            ClientOrders.Spec spec = new ClientOrders.Spec(side, type, price, quantity);
+            if (clientOrderId != null) {
+                Optional<OrderResult> earlier = clientOrders.repeatOf(clientOrderId, spec);
+                if (earlier.isPresent()) {
+                    return earlier.get();
+                }
+            }
             // Czas i walidacja przed zmiana arkusza: jesli cokolwiek tu padnie,
             // arkusz zostaje nietkniety, a klient dostaje blad zgodny z prawda.
             Instant now = clock.instant();
             OrderRequest order = new OrderRequest(book.lastOrderId() + 1, side, type, price, quantity);
             List<BookEvent> events = book.submit(order);
-            publish(events, now);
-            return new OrderResult(order.id(), events);
+            publish(events, now, clientOrderId);
+            OrderResult result = new OrderResult(order.id(), events);
+            if (clientOrderId != null) {
+                clientOrders.remember(clientOrderId, spec, result);
+            }
+            return result;
         });
     }
 
@@ -103,7 +128,7 @@ public final class InstrumentEngine implements AutoCloseable {
         return submit(() -> {
             Instant now = clock.instant();
             Optional<OrderCancelled> cancelled = book.cancel(orderId);
-            cancelled.ifPresent(event -> publish(List.of(event), now));
+            cancelled.ifPresent(event -> publish(List.of(event), now, null));
             return cancelled;
         });
     }
@@ -209,10 +234,10 @@ public final class InstrumentEngine implements AutoCloseable {
         }
     }
 
-    private void publish(List<BookEvent> events, Instant now) {
+    private void publish(List<BookEvent> events, Instant now, ClientOrderId clientOrderId) {
         List<EngineEvent> batch = new ArrayList<>(events.size());
         for (BookEvent event : events) {
-            batch.add(new EngineEvent(symbol, ++sequence, now, event));
+            batch.add(new EngineEvent(symbol, ++sequence, now, event, clientOrderId));
         }
         try {
             sink.publish(batch);
