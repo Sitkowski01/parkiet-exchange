@@ -42,7 +42,7 @@ public final class EventJournal {
             select id, run_id, symbol, sequence, occurred_at, type, order_id, maker_order_id, taker_order_id,
                    side, price, quantity, reason
             from engine_event
-            where run_id = ? and symbol = ?
+            where run_id = ? and symbol = ? and sequence > ?
             order by sequence""";
 
     private final JdbcTemplate jdbc;
@@ -67,14 +67,43 @@ public final class EventJournal {
         return id == null ? OptionalLong.empty() : OptionalLong.of(id);
     }
 
+    /** Czy przebieg zamknal sie po zapisaniu calego dziennika (puste closed_at = urwal sie, np. awaria). */
+    public boolean closedCleanly(long runId) {
+        return Boolean.TRUE.equals(jdbc.queryForObject(
+                "select closed_at is not null from engine_run where id = ?", Boolean.class, runId));
+    }
+
+    /** Najmniejsze id, od ktorego (w gore) wolno numerowac zlecenia w przebiegu -- po awarii; 0 = bez ograniczen. */
+    public long orderIdFloor(long runId) {
+        return jdbc.queryForObject("select order_id_floor from engine_run where id = ?", Long.class, runId);
+    }
+
+    /** Zapisuje przeskok numeracji po awarii, zanim gielda wyda pierwszy nowy numer. Nigdy go nie obniza. */
+    public void raiseOrderIdFloor(long runId, long floor) {
+        jdbc.update("update engine_run set order_id_floor = greatest(order_id_floor, ?) where id = ?", floor, runId);
+    }
+
+    /** Numer ostatniego zapisanego zdarzenia spolki w przebiegu; 0, gdy jeszcze zadnego. */
+    public long lastSequence(long runId, String symbol) {
+        Long last = jdbc.queryForObject("select max(sequence) from engine_event where run_id = ? and symbol = ?",
+                Long.class, runId, symbol);
+        return last == null ? 0 : last;
+    }
+
+    /** Caly przebieg spolki od pierwszego zdarzenia. */
+    public void replay(long runId, String symbol, Consumer<EngineEvent> consumer) {
+        replay(runId, symbol, 0, consumer);
+    }
+
     /**
-     * Przekazuje po kolei wszystkie zdarzenia spolki z danego przebiegu, w kolejnosci {@code sequence}.
+     * Przekazuje po kolei zdarzenia spolki z danego przebiegu o numerze wiekszym niz {@code afterSequence}
+     * (0 = od poczatku; po migawce -- tylko to, co przyszlo po niej), w kolejnosci {@code sequence}.
      * Strumieniowo (kursor po stronie bazy): caly dzien handlu nie musi zmiescic sie w pamieci naraz.
      * PostgreSQL trzyma kursor tylko w transakcji -- poza nia sterownik wczytalby wszystko od razu.
      */
-    public void replay(long runId, String symbol, Consumer<EngineEvent> consumer) {
+    public void replay(long runId, String symbol, long afterSequence, Consumer<EngineEvent> consumer) {
         tx.executeWithoutResult(status -> {
-            try (Stream<StoredEvent> events = streaming.queryForStream(REPLAY, ROW, runId, symbol)) {
+            try (Stream<StoredEvent> events = streaming.queryForStream(REPLAY, ROW, runId, symbol, afterSequence)) {
                 events.forEach(stored -> consumer.accept(stored.event()));
             }
         });
