@@ -52,12 +52,20 @@ final class MarketDataHandler extends TextWebSocketHandler {
         }
         // Kazdy klient to watek, kolejka i obrazy arkusza z kolejki silnika -- bez limitu
         // skrypt otwierajacy polaczenia w petli odbieralby miejsce prawdziwym zleceniom.
-        if (connections.size() >= maxClients) {
+        // Sprawdzenie i zajecie miejsca razem: rownolegle polaczenia nie przeskocza limitu.
+        ClientConnection connection;
+        synchronized (connections) {
+            if (connections.size() >= maxClients) {
+                connection = null;
+            } else {
+                connection = new ClientConnection(session, clientQueue);
+                connections.put(session.getId(), connection);
+            }
+        }
+        if (connection == null) {
             session.close(FULL);
             return;
         }
-        ClientConnection connection = new ClientConnection(session, clientQueue);
-        connections.put(session.getId(), connection);
         symbols.forEach(symbol -> hub.subscribe(symbol, connection));
         Map<String, CompletableFuture<BookSnapshot>> snapshots = books.snapshots(new LinkedHashSet<>(symbols));
         for (CompletableFuture<BookSnapshot> snapshot : snapshots.values()) {

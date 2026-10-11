@@ -76,6 +76,31 @@ class MarketDataHandlerTest {
         assertThat(hub.hasSubscribers("PKO")).isFalse();
     }
 
+    /** Scenariusz z review: sprawdzenie i zajecie miejsca nie byly jednym krokiem. */
+    @Test
+    void parallelConnectionsNeverExceedTheLimit() throws Exception {
+        MarketDataHandler limited = new MarketDataHandler(hub,
+                new BookBroadcaster(hub, engine, 10, Duration.ofSeconds(1)), Set.of("CDR"), 100, 5);
+        List<FakeSession> sessions = java.util.stream.Stream.generate(FakeSession::create).limit(40).toList();
+        for (FakeSession s : sessions) {
+            when(s.session.getUri()).thenReturn(URI.create("ws://x/ws/market?symbols=CDR"));
+        }
+        java.util.concurrent.CountDownLatch start = new java.util.concurrent.CountDownLatch(1);
+        try (var pool = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            for (FakeSession s : sessions) {
+                pool.submit(() -> {
+                    start.await();
+                    limited.afterConnectionEstablished(s.session);
+                    return null;
+                });
+            }
+            start.countDown();
+        }
+
+        assertThat(limited.clients()).isEqualTo(5);
+        assertThat(sessions.stream().filter(s -> MarketDataHandler.FULL.equals(s.closedWith.get()))).hasSize(35);
+    }
+
     @Test
     void missingUriIsRejected() throws Exception {
         handler.afterConnectionEstablished(fake.session);
