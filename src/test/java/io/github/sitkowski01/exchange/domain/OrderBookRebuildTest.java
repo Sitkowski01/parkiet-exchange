@@ -107,16 +107,18 @@ class OrderBookRebuildTest {
     }
 
     @Test
-    void skippedOrderIdsAreNeverHandedOutAgain() {
+    void reservedOrderIdsAreNeverHandedOutAgain() {
         OrderBook.Rebuilder rebuilder = new OrderBook.Rebuilder();
         rebuilder.apply(new OrderRested(7, Side.BUY, 100, 2));
-        rebuilder.skipOrderIds(1_000);
+        rebuilder.reserveOrderIdsUpTo(1_007);
+        rebuilder.reserveOrderIdsUpTo(3);
+        assertThat(rebuilder.lastOrderId()).as("rezerwacja nigdy nie cofa numeracji").isEqualTo(1_007);
         OrderBook book = rebuilder.finish();
 
         assertThat(book.lastOrderId()).isEqualTo(1_007);
         assertThatThrownBy(() -> book.submit(OrderRequest.limit(500, Side.BUY, 100, 1)))
                 .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new OrderBook.Rebuilder().skipOrderIds(-1))
+        assertThatThrownBy(() -> new OrderBook.Rebuilder().reserveOrderIdsUpTo(-1))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new OrderBook.Snapshot(List.of(), -1))
                 .isInstanceOf(IllegalArgumentException.class);

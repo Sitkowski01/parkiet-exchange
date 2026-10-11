@@ -128,15 +128,20 @@ public final class OrderBook {
             return rebuilder;
         }
 
+        /** Id ostatniego zlecenia widzianego do tej pory (z migawki i zdarzen). */
+        public long lastOrderId() {
+            return book.lastOrderId;
+        }
+
         /**
-         * Pomija {@code count} kolejnych id zlecen. Po twardej awarii klienci mogli dostac numery zlecen,
-         * ktorych dziennik nie zdazyl zapisac -- nowe zlecenia nie moga dostac tych samych.
+         * Nastepne zlecenie dostanie id wieksze niz {@code orderId}. Po twardej awarii klienci mogli dostac
+         * numery zlecen, ktorych dziennik nie zdazyl zapisac -- nowe zlecenia nie moga dostac tych samych.
          */
-        public void skipOrderIds(long count) {
-            if (count < 0) {
-                throw new IllegalArgumentException("count must not be negative, was " + count);
+        public void reserveOrderIdsUpTo(long orderId) {
+            if (orderId < 0) {
+                throw new IllegalArgumentException("orderId must not be negative, was " + orderId);
             }
-            book.seen(book.lastOrderId + count);
+            book.seen(orderId);
         }
 
         public void apply(BookEvent event) {
