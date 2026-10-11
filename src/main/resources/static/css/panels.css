@@ -1,6 +1,7 @@
 /* Biurko: wykres + dziennik po lewej, arkusz w srodku, zlecenie i transakcje po prawej. */
 .desk {
-  flex: 1;
+  /* Rosnie do ekranu, ale nie kurczy sie ponizej tresci -- na niskim oknie stopka zaslaniala dziennik. */
+  flex: 1 0 auto;
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px 300px;
   grid-template-rows: minmax(420px, 1fr) 250px;
