@@ -28,6 +28,7 @@ dependencies {
 	implementation("org.springframework.boot:spring-boot-starter-flyway")
 	implementation("org.flywaydb:flyway-database-postgresql")
 	implementation("org.springframework.boot:spring-boot-starter-kafka")
+	implementation("io.micrometer:micrometer-registry-prometheus")
 	runtimeOnly("org.postgresql:postgresql")
 	developmentOnly("org.springframework.boot:spring-boot-docker-compose")
 	testImplementation("org.springframework.boot:spring-boot-starter-actuator-test")
@@ -72,3 +73,4 @@ pitest {
 	// Usuniecie logowania to mutant, ktorego zaden rozsadny test nie zabije.
 	avoidCallsTo = setOf("java.lang.System\$Logger")
 }
+

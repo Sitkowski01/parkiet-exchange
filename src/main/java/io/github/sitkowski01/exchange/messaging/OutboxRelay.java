@@ -34,6 +34,9 @@ public final class OutboxRelay {
     private static final String LOCK_CURSOR =
             "select last_event_id from outbox_cursor where topic = ? for update skip locked";
     private static final String MOVE_CURSOR = "update outbox_cursor set last_event_id = ? where topic = ?";
+    private static final String LAG = """
+            select coalesce((select max(id) from engine_event), 0) - last_event_id
+            from outbox_cursor where topic = ?""";
 
     // Wlasny mapper, nie ten od REST API: ustawienia spring.jackson.* nie moga po cichu
     // zmienic formatu wiadomosci, na ktorym polegaja inne serwisy.
@@ -68,6 +71,15 @@ public final class OutboxRelay {
         } catch (RuntimeException e) {
             LOG.log(System.Logger.Level.WARNING, "outbox relay failed, will retry: " + e);
         }
+    }
+
+    /**
+     * Ile zdarzen z dziennika jeszcze nie poszlo do Kafki -- do metryk. Rosnie, gdy broker lezy;
+     * dziennik nic nie gubi, wiec po powrocie brokera spada do zera.
+     */
+    public long lag() {
+        Long lag = jdbc.queryForObject(LAG, Long.class, topic);
+        return lag == null ? 0 : lag;
     }
 
     /** @return ile zdarzen wyslano w tej paczce; 0 takze wtedy, gdy kursor trzyma inny relay */

@@ -79,7 +79,8 @@ final class MarketDataHandler extends TextWebSocketHandler {
         }
     }
 
-    int clients() {
+    /** Podlaczeni klienci -- do metryk. */
+    public int clients() {
         return connections.size();
     }
 
