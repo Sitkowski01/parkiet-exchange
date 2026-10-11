@@ -10,7 +10,7 @@ import java.util.Objects;
  * dzieje sie dopiero na brzegu systemu (API).
  *
  * @param id       nadawany przez silnik, dodatni i scisle rosnacy -- wyznacza kolejnosc w czasie
- * @param price    cena graniczna w groszach; dla MARKET zawsze 0
+ * @param price    cena graniczna w groszach; dla MARKET zawsze 0, najwyzej {@link #MAX_PRICE}
  * @param quantity liczba akcji, od 1 do {@link #MAX_QUANTITY}
  */
 public record OrderRequest(long id, Side side, OrderType type, long price, long quantity) {
@@ -21,6 +21,12 @@ public record OrderRequest(long id, Side side, OrderType type, long price, long 
      * Z nia trzeba by ponad 9 miliardow zlecen na jednej cenie.
      */
     public static final long MAX_QUANTITY = 1_000_000_000L;
+
+    /**
+     * Gorna granica ceny: 10 mln zl. Cena razy ilosc (obrot) miesci sie wtedy w long z zapasem,
+     * a cena w groszach -- w liczbie calkowitej JavaScriptu (2^53) po stronie przegladarki.
+     */
+    public static final long MAX_PRICE = 1_000_000_000L;
 
     public OrderRequest {
         Objects.requireNonNull(side, "side");
@@ -33,6 +39,9 @@ public record OrderRequest(long id, Side side, OrderType type, long price, long 
         }
         if (type == OrderType.LIMIT && price <= 0) {
             throw new IllegalArgumentException("limit price must be positive, was " + price);
+        }
+        if (price > MAX_PRICE) {
+            throw new IllegalArgumentException("price must be at most " + MAX_PRICE + ", was " + price);
         }
         if (type == OrderType.MARKET && price != 0) {
             throw new IllegalArgumentException("market order has no price, was " + price);

@@ -41,6 +41,15 @@ class OrderRequestTest {
     }
 
     @Test
+    void priceIsCappedSoTurnoverFitsInLong() {
+        assertThat(OrderRequest.limit(1, Side.BUY, OrderRequest.MAX_PRICE, 10).price()).isEqualTo(OrderRequest.MAX_PRICE);
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> OrderRequest.limit(1, Side.BUY, OrderRequest.MAX_PRICE + 1, 10))
+                .withMessageContaining("price");
+        assertThat(Math.multiplyHigh(OrderRequest.MAX_PRICE, OrderRequest.MAX_QUANTITY)).isZero();
+    }
+
+    @Test
     void rejectsMarketOrderWithPrice() {
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> new OrderRequest(1, Side.BUY, OrderType.MARKET, 100, 10));
