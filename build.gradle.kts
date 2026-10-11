@@ -74,3 +74,28 @@ pitest {
 	avoidCallsTo = setOf("java.lang.System\$Logger")
 }
 
+// Benchmarki JMH w osobnym zestawie zrodel: nie trafiaja do jara ani do testow.
+// ./gradlew jmh            -- wszystkie (kilka minut)
+// ./gradlew jmh -Pquick    -- szybki przebieg do sprawdzenia, ze dzialaja
+val jmh: SourceSet by sourceSets.creating {
+	compileClasspath += sourceSets.main.get().output
+	runtimeClasspath += sourceSets.main.get().output
+}
+configurations[jmh.implementationConfigurationName].extendsFrom(configurations.implementation.get())
+configurations[jmh.runtimeOnlyConfigurationName].extendsFrom(configurations.runtimeOnly.get())
+
+dependencies {
+	"jmhImplementation"("org.openjdk.jmh:jmh-core:1.37")
+	"jmhAnnotationProcessor"("org.openjdk.jmh:jmh-generator-annprocess:1.37")
+}
+
+tasks.register<JavaExec>("jmh") {
+	group = "verification"
+	description = "Runs JMH benchmarks"
+	classpath = jmh.runtimeClasspath
+	mainClass = "org.openjdk.jmh.Main"
+	val quick = project.hasProperty("quick")
+	args(if (quick) listOf("-f", "1", "-wi", "1", "-i", "2", "-w", "1s", "-r", "1s") else listOf("-f", "2", "-wi", "3", "-i", "5"))
+	args("-rf", "json", "-rff", layout.buildDirectory.file("reports/jmh/results.json").get().asFile.path)
+	doFirst { layout.buildDirectory.dir("reports/jmh").get().asFile.mkdirs() }
+}
