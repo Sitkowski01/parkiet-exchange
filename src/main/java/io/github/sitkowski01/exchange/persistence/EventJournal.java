@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.persistence;
 import io.github.sitkowski01.exchange.domain.BookEvent;
 import io.github.sitkowski01.exchange.domain.BookEvent.OrderCancelled;
 import io.github.sitkowski01.exchange.domain.Side;
+import io.github.sitkowski01.exchange.engine.ClientOrderId;
 import io.github.sitkowski01.exchange.engine.EngineEvent;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -28,7 +29,7 @@ public final class EventJournal {
 
     private static final String READ_AFTER = """
             select id, run_id, symbol, sequence, occurred_at, type, order_id, maker_order_id, taker_order_id,
-                   side, price, quantity, reason
+                   side, price, quantity, reason, client_order_id
             from engine_event
             where id > ?
             order by id
@@ -36,14 +37,33 @@ public final class EventJournal {
 
     private static final RowMapper<StoredEvent> ROW = (rs, n) -> new StoredEvent(rs.getLong("id"),
             rs.getLong("run_id"), new EngineEvent(rs.getString("symbol"), rs.getLong("sequence"),
-            rs.getObject("occurred_at", OffsetDateTime.class).toInstant(), bookEvent(rs)));
+            rs.getObject("occurred_at", OffsetDateTime.class).toInstant(), bookEvent(rs),
+            ClientOrderId.ofNullable(rs.getString("client_order_id"))));
 
     private static final String REPLAY = """
             select id, run_id, symbol, sequence, occurred_at, type, order_id, maker_order_id, taker_order_id,
-                   side, price, quantity, reason
+                   side, price, quantity, reason, client_order_id
             from engine_event
             where run_id = ? and symbol = ? and sequence > ?
             order by sequence""";
+
+    // Zdarzenia ostatnich {limit} zlecen z identyfikatorem klienta -- wszystkie zdarzenia kazdego z nich.
+    // Ranking po ostatnim uzyciu (max): identyfikator uzyty ponownie liczy sie jako swiezy.
+    private static final String RECENT_CLIENT_ORDERS = """
+            with recent as (
+                select client_order_id, max(sequence) as last_sequence
+                from engine_event
+                where run_id = ? and symbol = ? and client_order_id is not null
+                group by client_order_id
+                order by last_sequence desc
+                limit ?
+            )
+            select e.id, e.run_id, e.symbol, e.sequence, e.occurred_at, e.type, e.order_id, e.maker_order_id,
+                   e.taker_order_id, e.side, e.price, e.quantity, e.reason, e.client_order_id
+            from engine_event e
+            join recent r on r.client_order_id = e.client_order_id
+            where e.run_id = ? and e.symbol = ? and e.client_order_id is not null
+            order by e.sequence""";
 
     private final JdbcTemplate jdbc;
     private final JdbcTemplate streaming;
@@ -102,6 +122,16 @@ public final class EventJournal {
                 events.forEach(stored -> consumer.accept(stored.event()));
             }
         });
+    }
+
+    /**
+     * Zdarzenia ostatnich {@code limit} zlecen spolki zlozonych z identyfikatorem klienta, w kolejnosci
+     * {@code sequence} -- do odbudowy pamieci powtorek ({@link io.github.sitkowski01.exchange.engine.ClientOrders}).
+     */
+    public List<EngineEvent> recentClientOrders(long runId, String symbol, int limit) {
+        return jdbc.query(RECENT_CLIENT_ORDERS, ROW, runId, symbol, limit, runId, symbol).stream()
+                .map(StoredEvent::event)
+                .toList();
     }
 
     private static BookEvent bookEvent(ResultSet rs) throws SQLException {
