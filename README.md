@@ -9,7 +9,10 @@ Cena na giełdzie nie przychodzi z zewnątrz. To cena ostatniej transakcji, czyl
 w którym czyjeś kupno spotkało się z czyjąś sprzedażą. Ten projekt jest źródłem notowań,
 nie ich odbiorcą.
 
-![Parkiet — terminal w przeglądarce](docs/parkiet.png)
+**[Demo terminala →](https://sitekmikolaj.pl/parkiet/)** — nagranie prawdziwej sesji z botami, odtwarzane
+w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-bez-serwera)).
+
+[![Parkiet — terminal w przeglądarce](docs/parkiet.png)](https://sitekmikolaj.pl/parkiet/)
 
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=demo'   # Docker; potem http://localhost:8080
