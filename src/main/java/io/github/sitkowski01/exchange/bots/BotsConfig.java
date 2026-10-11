@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.util.Map;
 import java.util.SplittableRandom;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Boty wlaczane wylacznie jawnie ({@code exchange.bots.enabled=true}, np. profil {@code demo}).
@@ -56,6 +57,8 @@ class BotsConfig {
         try (YahooPriceSource source = new YahooPriceSource(props.priceSourceUrl(), Duration.ofSeconds(2))) {
             prices = StartingPrices.resolve(exchange.symbols(), source, props.fallbackPrices());
         }
+        prices = StartingPrices.preferBookMid(prices, symbol -> engine.instrument(symbol).snapshot(1)
+                .orTimeout(exchange.requestTimeout().toMillis(), TimeUnit.MILLISECONDS).join());
         return new BotRunner(engine, prices,
                 new BotRunner.BotSettings(props.volatility(), props.spreadBps(), props.makerQuantity(),
                         props.noiseProbability(), exchange.requestTimeout()),

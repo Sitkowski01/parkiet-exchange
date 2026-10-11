@@ -205,6 +205,8 @@ z konfiguracji.
 - Animator przestawia kwotowania **po jednej stronie naraz**, zaczynając od tej, od której cena
   ucieka: druga strona stoi cały czas, a bot nigdy nie handluje sam ze sobą.
 - Każda spółka ma osobne zadanie — zablokowany silnik jednej nie zatrzymuje botów pozostałych.
+- Po restarcie z dziennika boty zaczynają od środka odtworzonego arkusza, a nie od kursu z rynku —
+  ich zlecenia z poprzedniego przebiegu stoją obok nowych, zamiast się z nimi krzyżować.
 - Boty ruszają dopiero po pełnym starcie aplikacji i stają jako pierwsze przy zamykaniu.
 - Domyślnie wyłączone: bez profilu `demo` w arkuszu jest tylko to, co złożą klienci.
 
