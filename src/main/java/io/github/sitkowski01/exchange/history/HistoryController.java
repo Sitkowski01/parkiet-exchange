@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonFormat;
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
 import io.github.sitkowski01.exchange.engine.UnknownInstrumentException;
 import io.github.sitkowski01.exchange.history.TradeHistory.Candle;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import org.springframework.http.HttpStatus;
@@ -63,8 +66,14 @@ class HistoryController {
     }
 
     @GetMapping
-    List<CandleView> candles(@PathVariable String symbol,
+    @Tag(name = "Historia")
+    @Operation(summary = "Świece OHLC do wykresu",
+            description = "Liczone jednym zapytaniem SQL z dziennika zdarzeń, od najstarszej. Przedział bez transakcji "
+                    + "nie ma świecy. seconds × count najwyżej 24 h.")
+    List<CandleView> candles(@Parameter(example = "CDR") @PathVariable String symbol,
+                             @Parameter(description = "Długość świecy w sekundach")
                              @RequestParam(defaultValue = "5") @Min(1) @Max(3600) int seconds,
+                             @Parameter(description = "Ile ostatnich przedziałów")
                              @RequestParam(defaultValue = "120") @Min(1) @Max(1000) int count) {
         if (!symbols.contains(symbol)) {
             throw new UnknownInstrumentException(symbol);

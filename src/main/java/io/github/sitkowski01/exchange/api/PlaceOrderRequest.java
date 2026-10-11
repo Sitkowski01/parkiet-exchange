@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.api;
 import io.github.sitkowski01.exchange.domain.OrderRequest;
 import io.github.sitkowski01.exchange.domain.OrderType;
 import io.github.sitkowski01.exchange.domain.Side;
+import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.DecimalMax;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.NotNull;
@@ -17,8 +18,12 @@ import java.math.BigDecimal;
  */
 public record PlaceOrderRequest(
         @NotNull Side side,
+        @Schema(description = "LIMIT czeka w arkuszu; MARKET (PKC) bierze, co jest, resztę anuluje")
         @NotNull OrderType type,
+        @Schema(description = "Złotówki, najwyżej 2 miejsca po przecinku; "
+                + "wymagana dla LIMIT, zabroniona dla MARKET")
         @Positive @DecimalMax("10000000") BigDecimal price,
+        @Schema(example = "10")
         @NotNull @Positive @Max(OrderRequest.MAX_QUANTITY) Long quantity) {
 
     /**

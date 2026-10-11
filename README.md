@@ -25,10 +25,10 @@ w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-be
   metryki w Prometheus/Grafana.
 - **Liczby** — silnik 2,5 mln zleceń/s (JMH, 6 spółek); cała droga HTTP → Postgres → Kafka
   ok. 1000 zleceń/s przy p95 8 ms (k6).
-- **Testy** — 259 automatycznych + 13 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
+- **Testy** — 260 automatycznych + 14 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
   współbieżności, Testcontainers, mutacyjne (PIT 93%), ArchUnit, Playwright.
 
-Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · Micrometer · Prometheus · Grafana ·
+Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · OpenAPI · Micrometer · Prometheus · Grafana ·
 JUnit · Testcontainers · PIT · ArchUnit · JMH · k6 · Playwright
 
 ```bash
@@ -126,6 +126,10 @@ curl -X DELETE localhost:8080/api/instruments/CDR/orders/1
 Błędy w formacie RFC 9457 (`application/problem+json`). Ceny w JSON-ie to tekst
 (`"250.40"`), żeby klient w JS nie zgubił groszy w `double`. Spółki, pojemność kolejki
 i limit czasu: [`application.yml`](src/main/resources/application.yml).
+
+**Opis API (OpenAPI 3):** `http://localhost:8080/swagger-ui.html` — każdy endpoint z opisem, kodami błędów
+i przykładem, do wywołania z przeglądarki („Try it out”); sam opis w JSON-ie pod `/v3/api-docs`, np. do wygenerowania
+klienta. Generowany z kontrolerów i rekordów, więc nie rozjedzie się z kodem.
 
 ## Dziennik zdarzeń w PostgreSQL
 
@@ -375,7 +379,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
 | **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); migawka z losowego miejsca + reszta dziennika = cały dziennik (4 ziarna); restart na prawdziwej bazie ciągnie ten sam przebieg, także od migawki; migawka nigdy nie wyprzedza dziennika; po awarii numery zleceń nie wracają, także po kolejnym czystym restarcie; dziura w numeracji i niespójny dziennik zatrzymują start |
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
-| **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza, układ na laptopie i telefonie; osobno demo z nagrania (bez żadnego serwera, symulowane zlecenia) |
+| **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza, układ na laptopie i telefonie, Swagger UI z wywołaniem endpointu; osobno demo z nagrania (bez żadnego serwera, symulowane zlecenia) |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 367/393 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
