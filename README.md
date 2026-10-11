@@ -1,6 +1,6 @@
 # Parkiet — silnik giełdy
 
-[![CI](https://github.com/Sitkowski01/mini-exchange/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitkowski01/mini-exchange/actions/workflows/ci.yml)
+[![CI](https://github.com/Sitkowski01/parkiet-exchange/actions/workflows/ci.yml/badge.svg)](https://github.com/Sitkowski01/parkiet-exchange/actions/workflows/ci.yml)
 
 Silnik giełdy w **Javie 21** i **Spring Boot 4**: przyjmuje zlecenia kupna i sprzedaży,
 kojarzy je w arkuszu według **ceny, a potem czasu** — tak jak GPW — i publikuje transakcje.
