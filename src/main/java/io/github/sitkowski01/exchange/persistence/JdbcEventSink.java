@@ -52,7 +52,14 @@ public final class JdbcEventSink implements EventSink {
      * Silnik numeruje wtedy zdarzenia od miejsca, w ktorym przebieg sie urwal, wiec klucz sie nie zderza.
      */
     public static JdbcEventSink resumeRun(JdbcTemplate jdbc, TransactionTemplate tx, long runId) {
+        // Przebieg znowu trwa: jesli teraz sie urwie, nastepny start ma to zobaczyc.
+        jdbc.update("update engine_run set closed_at = null where id = ?", runId);
         return new JdbcEventSink(jdbc, tx, runId);
+    }
+
+    /** Caly dziennik przebiegu zapisany -- nastepny start wie, ze nie bylo awarii. */
+    public void markClosed() {
+        jdbc.update("update engine_run set closed_at = now() where id = ?", runId);
     }
 
     public long runId() {
