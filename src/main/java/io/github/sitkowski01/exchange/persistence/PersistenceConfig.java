@@ -4,6 +4,7 @@ import io.github.sitkowski01.exchange.config.EngineSink;
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
 import io.github.sitkowski01.exchange.config.StartingState;
 import io.github.sitkowski01.exchange.engine.AsyncEventSink;
+import io.github.sitkowski01.exchange.engine.MatchingEngine;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -36,14 +37,19 @@ class PersistenceConfig {
         return new EventJournal(jdbc, tx);
     }
 
+    @Bean
+    SnapshotStore snapshotStore(JdbcTemplate jdbc) {
+        return new SnapshotStore(jdbc);
+    }
+
     /**
      * Po restarcie gielda ciagnie ostatni przebieg dalej, z arkuszami odtworzonymi z dziennika.
      * {@code exchange.journal.resume=false} -- zawsze nowy przebieg z pustymi arkuszami.
      */
     @Bean
-    StartingState startingState(EventJournal journal, ExchangeProperties exchange,
+    StartingState startingState(EventJournal journal, SnapshotStore snapshots, ExchangeProperties exchange,
                                 @Value("${exchange.journal.resume:true}") boolean resume) {
-        return resume ? JournalRecovery.recover(journal, exchange.symbols()) : StartingState.fresh();
+        return resume ? JournalRecovery.recover(journal, snapshots, exchange.symbols()) : StartingState.fresh();
     }
 
     @Bean
@@ -57,6 +63,17 @@ class PersistenceConfig {
     @Bean(destroyMethod = "close")
     @EngineSink
     AsyncEventSink eventSink(JdbcEventSink journal) {
-        return AsyncEventSink.start(journal, QUEUE_CAPACITY, RETRY_BACKOFF, CLOSE_TIMEOUT);
+        return AsyncEventSink.start(journal, QUEUE_CAPACITY, RETRY_BACKOFF, CLOSE_TIMEOUT, journal::markClosed);
+    }
+
+    /**
+     * Migawki arkuszy co {@code exchange.journal.snapshot-interval}: start czyta najnowsza i dociaga tylko
+     * zdarzenia po niej. Zalezy od silnika, wiec Spring zamyka go przed silnikiem.
+     */
+    @Bean(destroyMethod = "close")
+    BookSnapshotter bookSnapshotter(MatchingEngine engine, EventJournal journal, SnapshotStore snapshots,
+                                    JdbcEventSink sink, ExchangeProperties exchange,
+                                    @Value("${exchange.journal.snapshot-interval:1m}") Duration interval) {
+        return BookSnapshotter.start(engine, journal, snapshots, sink.runId(), interval, exchange.requestTimeout());
     }
 }
