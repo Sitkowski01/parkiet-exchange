@@ -1,6 +1,6 @@
 spring:
   application:
-    name: mini-exchange
+    name: parkiet-exchange
   threads:
     # Watek zadania czeka na odpowiedz silnika (join). Watki wirtualne czekaja prawie za darmo,
     # wiec tysiac oczekujacych zadan nie zjada tysiaca watkow systemowych.

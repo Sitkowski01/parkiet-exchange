@@ -1,1 +1,1 @@
-rootProject.name = "mini-exchange"
+rootProject.name = "parkiet-exchange"

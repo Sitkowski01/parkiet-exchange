@@ -43,7 +43,7 @@ public final class YahooPriceSource implements ReferencePriceSource, AutoCloseab
         try {
             HttpResponse<String> response = http.send(HttpRequest.newBuilder(uri).timeout(timeout)
                     // Bez naglowka przegladarki Yahoo potrafi odpowiedziec 429.
-                    .header("User-Agent", "Mozilla/5.0 mini-exchange").GET().build(),
+                    .header("User-Agent", "Mozilla/5.0 parkiet-exchange").GET().build(),
                     HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 LOG.log(System.Logger.Level.WARNING, symbol + ": price source answered " + response.statusCode());
