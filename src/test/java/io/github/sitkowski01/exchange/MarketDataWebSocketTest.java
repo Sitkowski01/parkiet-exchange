@@ -16,8 +16,10 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
+import java.util.List;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -83,11 +85,14 @@ class MarketDataWebSocketTest {
     private static final class Client extends TextWebSocketHandler {
 
         final BlockingQueue<String> messages = new LinkedBlockingQueue<>();
+        // Wszystko, co przyszlo -- takze to, co nextOfType przeskoczyl w szukaniu innego typu.
+        final List<String> received = new CopyOnWriteArrayList<>();
         final CompletableFuture<CloseStatus> closed = new CompletableFuture<>();
         WebSocketSession session;
 
         @Override
         protected void handleTextMessage(WebSocketSession session, TextMessage message) {
+            received.add(message.getPayload());
             messages.add(message.getPayload());
         }
 
@@ -111,13 +116,22 @@ class MarketDataWebSocketTest {
             }
         }
 
+        /**
+         * Obraz arkusza i transakcja ida osobnymi watkami: nowy obraz moze przyjsc przed transakcja.
+         * Wtedy nextOfType("trade") juz go przeskoczyl -- szukamy wiec we wszystkim, co przyszlo.
+         */
         String nextBookAfter(long sequence) throws InterruptedException {
-            while (true) {
-                String book = nextOfType("book");
-                if (JsonPath.<Number>read(book, "$.sequence").longValue() >= sequence) {
-                    return book;
+            long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+            while (System.nanoTime() < deadline) {
+                for (String message : received) {
+                    if (message.contains("\"type\":\"book\"")
+                            && JsonPath.<Number>read(message, "$.sequence").longValue() >= sequence) {
+                        return message;
+                    }
                 }
+                messages.poll(100, TimeUnit.MILLISECONDS);
             }
+            throw new AssertionError("no book with sequence >= " + sequence + " in " + received);
         }
     }
 }
