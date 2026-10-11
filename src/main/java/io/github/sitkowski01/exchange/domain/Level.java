@@ -58,6 +58,15 @@ final class Level {
         return wanted;
     }
 
+    /** Odtwarzanie z dziennika: realizacja konkretnego zlecenia, zapisana wczesniej jako transakcja. */
+    void reduce(RestingOrder order, long traded) {
+        order.remaining -= traded;
+        quantity -= traded;
+        if (order.remaining == 0) {
+            queue.remove(order.id);
+        }
+    }
+
     boolean isEmpty() {
         return queue.isEmpty();
     }
