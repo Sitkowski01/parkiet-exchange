@@ -25,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Notowania przez prawdziwe gniazdo: klient WebSocket na losowym porcie, zlecenia przez HTTP.
- * Te same adnotacje co MiniExchangeApplicationTests, wiec oba testy dziela jeden kontekst (i kontenery).
+ * Te same adnotacje co ParkietApplicationTests, wiec oba testy dziela jeden kontekst (i kontenery).
  * PKN, bo inne testy w tym kontekscie handluja PZU i KGH.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)

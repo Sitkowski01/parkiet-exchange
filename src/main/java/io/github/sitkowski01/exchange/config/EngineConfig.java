@@ -33,7 +33,7 @@ class EngineConfig {
      *
      * <p>Lista wstrzykiwana wprost, a nie przez {@code ObjectProvider}: tylko tak Spring zapisuje,
      * ze silnik zalezy od odbiorcow, i zamyka silnik pierwszy. Inaczej zdarzenia ostatnich polecen
-     * trafilyby do juz zamknietego odbiorcy (pilnuje tego test w MiniExchangeApplicationTests).
+     * trafilyby do juz zamknietego odbiorcy (pilnuje tego test w ParkietApplicationTests).
      */
     @Bean(destroyMethod = "close")
     MatchingEngine matchingEngine(ExchangeProperties properties, Clock clock, @EngineSink List<EventSink> sinks,

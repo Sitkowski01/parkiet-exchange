@@ -38,7 +38,7 @@ import static org.awaitility.Awaitility.await;
 // Testy domyslnie wylaczaja eksport metryk; ten sprawdza tez /actuator/prometheus.
 @AutoConfigureMetrics
 @Import({TestcontainersConfiguration.class, KafkaContainerConfiguration.class})
-class MiniExchangeApplicationTests {
+class ParkietApplicationTests {
 
     @Autowired
     MockMvcTester mvc;
