@@ -1,5 +1,7 @@
 package io.github.sitkowski01.exchange.bots;
 
+import io.github.sitkowski01.exchange.domain.PriceLevel;
+import io.github.sitkowski01.exchange.engine.BookSnapshot;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
@@ -31,6 +33,16 @@ class PricesAndFairValueTest {
 
         assertThat(StartingPrices.resolve(List.of("CDR"), broken, Map.of("CDR", new BigDecimal("2.50"))))
                 .containsExactly(Map.entry("CDR", 250L));
+    }
+
+    @Test
+    void resumedBookMidWinsOverMarketPrice() {
+        Map<String, BookSnapshot> books = Map.of(
+                "CDR", new BookSnapshot("CDR", 9, List.of(new PriceLevel(25000, 50, 1)), List.of(new PriceLevel(25101, 50, 1))),
+                "PKO", new BookSnapshot("PKO", 3, List.of(new PriceLevel(11000, 50, 1)), List.of()));
+
+        assertThat(StartingPrices.preferBookMid(Map.of("CDR", 26300L, "PKO", 11394L), books::get))
+                .containsOnly(Map.entry("CDR", 25050L), Map.entry("PKO", 11394L));
     }
 
     @Test
