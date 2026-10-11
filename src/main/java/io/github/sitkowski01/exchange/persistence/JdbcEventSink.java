@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.persistence;
 import io.github.sitkowski01.exchange.domain.BookEvent;
 import io.github.sitkowski01.exchange.domain.BookEvent.OrderCancelled;
 import io.github.sitkowski01.exchange.domain.Side;
+import io.github.sitkowski01.exchange.engine.ClientOrderId;
 import io.github.sitkowski01.exchange.engine.EngineEvent;
 import io.github.sitkowski01.exchange.engine.EventSink;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -27,8 +28,8 @@ public final class JdbcEventSink implements EventSink {
 
     private static final String INSERT = """
             insert into engine_event (run_id, symbol, sequence, occurred_at, type, order_id,
-                                      maker_order_id, taker_order_id, side, price, quantity, reason)
-            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      maker_order_id, taker_order_id, side, price, quantity, reason, client_order_id)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             on conflict (run_id, symbol, sequence) do nothing""";
 
     private final JdbcTemplate jdbc;
@@ -92,6 +93,6 @@ public final class JdbcEventSink implements EventSink {
         // OffsetDateTime w UTC, nie java.sql.Timestamp: Timestamp przechodzi przez strefe czasowa JVM.
         return new Object[]{runId, e.symbol(), e.sequence(), OffsetDateTime.ofInstant(e.timestamp(), ZoneOffset.UTC),
                 type, orderId, makerOrderId, takerOrderId, side == null ? null : side.name(), price, quantity,
-                reason == null ? null : reason.name()};
+                reason == null ? null : reason.name(), ClientOrderId.valueOrNull(e.clientOrderId())};
     }
 }

@@ -2,6 +2,7 @@ package io.github.sitkowski01.exchange.persistence;
 
 import io.github.sitkowski01.exchange.config.StartingState;
 import io.github.sitkowski01.exchange.domain.OrderBook;
+import io.github.sitkowski01.exchange.engine.ClientOrders;
 import io.github.sitkowski01.exchange.engine.InstrumentState;
 import io.github.sitkowski01.exchange.engine.StateSnapshot;
 
@@ -85,7 +86,10 @@ public final class JournalRecovery {
             OrderBook.Rebuilder rebuilder = rebuilders.get(symbol);
             rebuilder.reserveOrderIdsUpTo(floor);
             if (sequences.get(symbol) > 0 || floor > 0) {
-                instruments.put(symbol, new InstrumentState(rebuilder.finish(), sequences.get(symbol)));
+                // Pamiec powtorek osobno od migawki: ostatnie zlecenia z identyfikatorem prosto z dziennika.
+                ClientOrders clientOrders = ClientOrders.rebuild(ClientOrders.DEFAULT_CAPACITY,
+                        journal.recentClientOrders(runId, symbol, ClientOrders.DEFAULT_CAPACITY));
+                instruments.put(symbol, new InstrumentState(rebuilder.finish(), sequences.get(symbol), clientOrders));
             }
         }
         LOG.log(System.Logger.Level.INFO, "resuming run " + runId + (crashed ? " after a crash" : "") + " ("
