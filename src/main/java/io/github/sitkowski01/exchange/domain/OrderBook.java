@@ -65,6 +65,86 @@ public final class OrderBook {
         return Optional.of(new OrderCancelled(orderId, order.remaining, OrderCancelled.Reason.REQUESTED));
     }
 
+    /**
+     * Odbudowuje arkusz z dziennika zdarzen (event sourcing) -- np. po restarcie gieldy.
+     *
+     * <p>Zdarzenia to fakty, nie polecenia: nie kojarzymy ich jeszcze raz, tylko nakladamy skutki.
+     * {@code RESTED} doklada zlecenie na koniec kolejki ceny (stad zachowany priorytet czasu),
+     * {@code TRADE} zmniejsza reszte zlecenia czekajacego, {@code CANCELLED} je zdejmuje.
+     * Zlecenie przychodzace (taker) nigdy nie czeka w chwili transakcji, wiec transakcja
+     * dotyka tylko makera.
+     *
+     * @throws IllegalStateException gdy dziennik jest niespojny (np. transakcja na nieznanym
+     *                               zleceniu) -- lepiej nie wystartowac niz handlowac na zlym arkuszu
+     */
+    public static OrderBook rebuild(Iterable<BookEvent> journal) {
+        Rebuilder rebuilder = new Rebuilder();
+        journal.forEach(rebuilder::apply);
+        return rebuilder.finish();
+    }
+
+    /**
+     * Odbudowa zdarzenie po zdarzeniu -- prosto z kursora bazy, bez trzymania calego dziennika
+     * w pamieci. Arkusz wychodzi dopiero z {@link #finish()}, wiec nikt nie zlozy zlecenia
+     * na arkuszu odbudowanym do polowy.
+     */
+    public static final class Rebuilder {
+
+        private OrderBook book = new OrderBook();
+
+        public void apply(BookEvent event) {
+            if (book == null) {
+                throw new IllegalStateException("rebuild already finished");
+            }
+            switch (event) {
+                case OrderRested r -> {
+                    if (book.index.containsKey(r.orderId())) {
+                        throw new IllegalStateException("order " + r.orderId() + " rested twice");
+                    }
+                    book.rest(new OrderRequest(r.orderId(), r.side(), OrderType.LIMIT, r.price(), r.quantity()),
+                            r.quantity());
+                    book.seen(r.orderId());
+                }
+                case BookEvent.Trade t -> {
+                    RestingOrder maker = book.index.get(t.makerOrderId());
+                    if (maker == null || maker.remaining < t.quantity()) {
+                        throw new IllegalStateException("trade " + t + " does not match a resting order");
+                    }
+                    NavigableMap<Long, Level> side = book.sideOf(maker.side);
+                    Level level = side.get(maker.price);
+                    level.reduce(maker, t.quantity());
+                    if (maker.remaining == 0) {
+                        book.index.remove(maker.id);
+                    }
+                    if (level.isEmpty()) {
+                        side.remove(maker.price);
+                    }
+                    book.seen(t.takerOrderId());
+                }
+                case OrderCancelled c -> {
+                    // NO_LIQUIDITY dotyczy zlecenia MARKET, ktore nigdy nie czekalo -- nie ma czego zdejmowac.
+                    if (c.reason() == OrderCancelled.Reason.REQUESTED && book.cancel(c.orderId()).isEmpty()) {
+                        throw new IllegalStateException("cancel of order " + c.orderId() + " that is not resting");
+                    }
+                    book.seen(c.orderId());
+                }
+            }
+        }
+
+        public OrderBook finish() {
+            if (book == null) {
+                throw new IllegalStateException("rebuild already finished");
+            }
+            OrderBook done = book;
+            book = null;
+            return done;
+        }
+    }
+
+    private void seen(long orderId) {
+        lastOrderId = Math.max(lastOrderId, orderId);
+    }
+
     /** Id ostatniego przyjetego zlecenia; nastepne musi byc wieksze. 0, gdy jeszcze zadnego nie bylo. */
     public long lastOrderId() {
         return lastOrderId;
