@@ -325,7 +325,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
 | **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
-| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 332/357 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
+| **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 346/371 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
 ```bash
 ./gradlew check     # testy + architektura + pokrycie (JaCoCo); Docker dla Testcontainers
