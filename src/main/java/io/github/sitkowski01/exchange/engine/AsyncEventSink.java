@@ -41,6 +41,8 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     private final Duration retryBackoff;
     private final Duration closeTimeout;
     private final Thread thread;
+    private final Runnable afterCleanClose;
+    private boolean announced;
 
     // stopped zmienia sie i jest sprawdzane pod tym zamkiem razem ze wstawieniem do kolejki:
     // po stopped = true nic juz do kolejki nie wejdzie, wiec watek piszacy wie, kiedy skonczyl.
@@ -50,8 +52,11 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
     // failing: ostatni zapis sie nie udal. gaveUp: nie udal sie po terminie -- reszta idzie do kosza.
     private volatile boolean failing;
     private volatile boolean gaveUp;
+    // Paczka odrzucona w publish (zamkniety albo martwy zapis) -- to tez strata, choc watek piszacy jej nie widzial.
+    private volatile boolean lost;
 
-    private AsyncEventSink(EventSink delegate, int capacity, Duration retryBackoff, Duration closeTimeout) {
+    private AsyncEventSink(EventSink delegate, int capacity, Duration retryBackoff, Duration closeTimeout,
+                           Runnable afterCleanClose) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.queue = new ArrayBlockingQueue<>(capacity);
         this.retryBackoff = Objects.requireNonNull(retryBackoff, "retryBackoff");
@@ -60,6 +65,7 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
             throw new IllegalArgumentException("retry backoff must be at least 1 ms, was " + retryBackoff);
         }
         this.closeTimeout = Objects.requireNonNull(closeTimeout, "closeTimeout");
+        this.afterCleanClose = Objects.requireNonNull(afterCleanClose, "afterCleanClose");
         this.thread = Thread.ofPlatform().name("event-writer").unstarted(this::run);
     }
 
@@ -69,7 +75,17 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
      * @param closeTimeout ile najwyzej trwa zamykanie, liczac od {@link #beginShutdown}
      */
     public static AsyncEventSink start(EventSink delegate, int capacity, Duration retryBackoff, Duration closeTimeout) {
-        AsyncEventSink sink = new AsyncEventSink(delegate, capacity, retryBackoff, closeTimeout);
+        return start(delegate, capacity, retryBackoff, closeTimeout, () -> {
+        });
+    }
+
+    /**
+     * @param afterCleanClose wolane raz, przy zamknieciu, gdy wszystko trafilo do odbiorcy -- np. znacznik
+     *                        w bazie, ze przebieg skonczyl sie bez strat. Po stracie (limit zamykania) nie.
+     */
+    public static AsyncEventSink start(EventSink delegate, int capacity, Duration retryBackoff, Duration closeTimeout,
+                                       Runnable afterCleanClose) {
+        AsyncEventSink sink = new AsyncEventSink(delegate, capacity, retryBackoff, closeTimeout, afterCleanClose);
         sink.thread.start();
         return sink;
     }
@@ -83,6 +99,7 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
         while (true) {
             synchronized (lock) {
                 if (stopped) {
+                    lost = true;
                     throw new IllegalStateException("event writer closed, dropping " + batch.size() + " events");
                 }
                 if (queue.offer(batch)) {
@@ -90,6 +107,7 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
                 }
             }
             if (gaveUp || (failing && pastDeadline())) {
+                lost = true;
                 throw new IllegalStateException("event writer stuck on shutdown, dropping " + batch.size() + " events");
             }
             // Kolejka pelna: czekamy krotko i probujemy znowu. Bez zamka, zeby close() mogl wejsc.
@@ -124,6 +142,18 @@ public final class AsyncEventSink implements EventSink, AutoCloseable {
                 thread.join();
             } catch (InterruptedException e) {
                 interrupted = true;
+            }
+        }
+        boolean announce;
+        synchronized (lock) {
+            announce = !announced && !gaveUp && !lost;
+            announced = true;
+        }
+        if (announce) {
+            try {
+                afterCleanClose.run();
+            } catch (RuntimeException e) {
+                LOG.log(System.Logger.Level.WARNING, "after-close action failed: " + e);
             }
         }
         if (interrupted) {

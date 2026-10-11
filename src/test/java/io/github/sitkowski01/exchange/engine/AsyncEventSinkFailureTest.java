@@ -132,6 +132,52 @@ class AsyncEventSinkFailureTest {
     }
 
     @Test
+    void cleanCloseIsAnnouncedOnceAfterEverythingIsWritten() {
+        List<String> order = new java.util.concurrent.CopyOnWriteArrayList<>();
+        AsyncEventSink sink = AsyncEventSink.start(batch -> order.add("write " + batch.getFirst().sequence()),
+                10, BACKOFF, Duration.ofSeconds(1), () -> order.add("closed"));
+        sink.publish(List.of(event(1)));
+
+        sink.close();
+        sink.close();
+
+        assertThat(order).containsExactly("write 1", "closed");
+    }
+
+    @Test
+    void closeAfterLosingEventsIsNotAnnounced() {
+        AtomicInteger announced = new AtomicInteger();
+        AsyncEventSink sink = AsyncEventSink.start(dead, 10, BACKOFF, Duration.ofMillis(50), announced::incrementAndGet);
+        sink.publish(List.of(event(1)));
+
+        sink.close();
+
+        assertThat(announced).hasValue(0);
+    }
+
+    /** Scenariusz z review: paczka odrzucona przy zamykaniu, a baza wraca, zanim zapis sie podda. */
+    @Test
+    void batchDroppedOnShutdownIsNotAnnouncedAsCleanClose() {
+        boolean[] healthy = {false};
+        AtomicInteger announced = new AtomicInteger();
+        AsyncEventSink sink = AsyncEventSink.start(batch -> {
+            if (!healthy[0]) {
+                dead.publish(batch);
+            }
+        }, 1, Duration.ofMillis(300), Duration.ofMillis(50), announced::incrementAndGet);
+        sink.publish(List.of(event(1)));
+        sink.publish(List.of(event(2)));
+        sink.beginShutdown();
+
+        CompletableFuture<Void> dropped = CompletableFuture.runAsync(() -> sink.publish(List.of(event(3))));
+        assertThat(dropped).failsWithin(Duration.ofSeconds(5));
+        healthy[0] = true;
+        sink.close();
+
+        assertThat(announced).hasValue(0);
+    }
+
+    @Test
     void closeWaitsUntilPendingEventsAreWritten() {
         AsyncEventSink sink = AsyncEventSink.start(batch -> {
             sleep(200);
