@@ -50,6 +50,78 @@ class OrderBookRebuildTest {
         assertSameState(original, rebuilt);
     }
 
+    /** Start z migawki: migawka z losowego miejsca + zdarzenia po niej = to samo co caly dziennik. */
+    @ParameterizedTest(name = "seed {0}")
+    @ValueSource(longs = {3, 11, 99, 4242})
+    void snapshotPlusTailIsIndistinguishableFromOriginal(long seed) {
+        Random random = new Random(seed);
+        OrderBook original = new OrderBook();
+        List<BookEvent> journal = new ArrayList<>();
+        int snapshotAt = 1_000 + random.nextInt(3_000);
+        OrderBook.Snapshot snapshot = null;
+        int tailFrom = 0;
+        long id = 0;
+        for (int step = 0; step < 5_000; step++) {
+            if (step == snapshotAt) {
+                snapshot = original.snapshot();
+                tailFrom = journal.size();
+            }
+            id = act(random, original, id, journal);
+        }
+
+        OrderBook.Rebuilder rebuilder = OrderBook.Rebuilder.from(snapshot);
+        journal.subList(tailFrom, journal.size()).forEach(rebuilder::apply);
+        OrderBook rebuilt = rebuilder.finish();
+
+        assertSameState(original, rebuilt);
+        Random next = new Random(seed * 17);
+        List<BookEvent> fromOriginal = new ArrayList<>();
+        List<BookEvent> fromRebuilt = new ArrayList<>();
+        long idA = id;
+        long idB = id;
+        for (int step = 0; step < 2_000; step++) {
+            long before = next.nextLong();
+            idA = act(new Random(before), original, idA, fromOriginal);
+            idB = act(new Random(before), rebuilt, idB, fromRebuilt);
+        }
+        assertThat(fromRebuilt).isEqualTo(fromOriginal);
+    }
+
+    @Test
+    void snapshotKeepsTimePriorityAndOrdersThatNeverRested() {
+        OrderBook book = new OrderBook();
+        book.submit(OrderRequest.limit(1, Side.SELL, 100, 5));
+        book.submit(OrderRequest.limit(2, Side.SELL, 100, 5));
+        book.submit(OrderRequest.limit(3, Side.BUY, 90, 1));
+        book.submit(OrderRequest.market(4, Side.SELL, 1));
+
+        OrderBook.Snapshot snapshot = book.snapshot();
+        OrderBook rebuilt = OrderBook.Rebuilder.from(snapshot).finish();
+
+        assertThat(snapshot.orders()).containsExactly(
+                new OrderRested(1, Side.SELL, 100, 5), new OrderRested(2, Side.SELL, 100, 5));
+        assertThat(rebuilt.lastOrderId()).isEqualTo(4);
+        // Starsze zlecenie po tej samej cenie dalej idzie pierwsze.
+        assertThat(rebuilt.submit(OrderRequest.market(5, Side.BUY, 3)))
+                .containsExactly(new Trade(1, 5, Side.BUY, 100, 3));
+    }
+
+    @Test
+    void skippedOrderIdsAreNeverHandedOutAgain() {
+        OrderBook.Rebuilder rebuilder = new OrderBook.Rebuilder();
+        rebuilder.apply(new OrderRested(7, Side.BUY, 100, 2));
+        rebuilder.skipOrderIds(1_000);
+        OrderBook book = rebuilder.finish();
+
+        assertThat(book.lastOrderId()).isEqualTo(1_007);
+        assertThatThrownBy(() -> book.submit(OrderRequest.limit(500, Side.BUY, 100, 1)))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OrderBook.Rebuilder().skipOrderIds(-1))
+                .isInstanceOf(IllegalArgumentException.class);
+        assertThatThrownBy(() -> new OrderBook.Snapshot(List.of(), -1))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     @Test
     void emptyJournalGivesEmptyBook() {
         OrderBook book = OrderBook.rebuild(List.of());

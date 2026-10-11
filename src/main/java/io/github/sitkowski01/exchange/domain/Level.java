@@ -6,6 +6,7 @@ import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Consumer;
 import java.util.function.LongConsumer;
 
 /**
@@ -65,6 +66,11 @@ final class Level {
         if (order.remaining == 0) {
             queue.remove(order.id);
         }
+    }
+
+    /** Zlecenia od najstarszego -- do migawki arkusza. */
+    void forEach(Consumer<RestingOrder> action) {
+        queue.values().forEach(action);
     }
 
     boolean isEmpty() {

@@ -66,6 +66,34 @@ public final class OrderBook {
     }
 
     /**
+     * Migawka arkusza: zlecenia czekajace jako {@code RESTED} w kolejnosci priorytetu (kupno od najlepszej
+     * ceny, potem sprzedaz; przy jednej cenie od najstarszego) i id ostatniego zlecenia. Nalozona po kolei
+     * na pusty arkusz ({@link Rebuilder#from}) daje ten sam arkusz, z tym samym priorytetem czasu.
+     */
+    public Snapshot snapshot() {
+        List<OrderRested> orders = new ArrayList<>(index.size());
+        for (NavigableMap<Long, Level> side : List.of(bids, asks)) {
+            side.values().forEach(level -> level.forEach(
+                    o -> orders.add(new OrderRested(o.id, o.side, o.price, o.remaining))));
+        }
+        return new Snapshot(orders, lastOrderId);
+    }
+
+    /**
+     * @param orders      zlecenia czekajace w kolejnosci priorytetu
+     * @param lastOrderId id ostatniego przyjetego zlecenia -- takze takiego, ktore nie czeka (PKC, zrealizowane)
+     */
+    public record Snapshot(List<OrderRested> orders, long lastOrderId) {
+
+        public Snapshot {
+            orders = List.copyOf(orders);
+            if (lastOrderId < 0) {
+                throw new IllegalArgumentException("lastOrderId must not be negative, was " + lastOrderId);
+            }
+        }
+    }
+
+    /**
      * Odbudowuje arkusz z dziennika zdarzen (event sourcing) -- np. po restarcie gieldy.
      *
      * <p>Zdarzenia to fakty, nie polecenia: nie kojarzymy ich jeszcze raz, tylko nakladamy skutki.
@@ -91,6 +119,25 @@ public final class OrderBook {
     public static final class Rebuilder {
 
         private OrderBook book = new OrderBook();
+
+        /** Odbudowa od migawki: dalej wystarczy nalozyc zdarzenia, ktore przyszly po niej. */
+        public static Rebuilder from(Snapshot snapshot) {
+            Rebuilder rebuilder = new Rebuilder();
+            snapshot.orders().forEach(rebuilder::apply);
+            rebuilder.book.seen(snapshot.lastOrderId());
+            return rebuilder;
+        }
+
+        /**
+         * Pomija {@code count} kolejnych id zlecen. Po twardej awarii klienci mogli dostac numery zlecen,
+         * ktorych dziennik nie zdazyl zapisac -- nowe zlecenia nie moga dostac tych samych.
+         */
+        public void skipOrderIds(long count) {
+            if (count < 0) {
+                throw new IllegalArgumentException("count must not be negative, was " + count);
+            }
+            book.seen(book.lastOrderId + count);
+        }
 
         public void apply(BookEvent event) {
             if (book == null) {
