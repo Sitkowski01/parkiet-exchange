@@ -20,6 +20,9 @@ spring:
         # Polaczenie juz wziete, a baza zawisla w polowie zapytania: bez limitu sterownik
         # czekalby w nieskonczonosc, a za watkiem event-writer stanelaby cala gielda. W sekundach.
         socketTimeout: 5
+        # Paczka insertow jako jeden wielowierszowy INSERT zamiast N osobnych polecen. Bez tego
+        # group commit zapisywal ok. 2 tys. zdarzen/s i pod obciazeniem kolejka zapisu dobijala do limitu.
+        reWriteBatchedInserts: true
   kafka:
     bootstrap-servers: localhost:9092
     producer:
