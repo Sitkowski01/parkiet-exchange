@@ -30,16 +30,17 @@ const level = (l) => ({ price: toGrosze(l.price), quantity: l.quantity, orders: 
 /**
  * Strumien notowan z ponownym laczeniem. Zszywanie po sequence: obraz arkusza starszy niz
  * ostatnio widziany jest odrzucany (moze przyjsc po nowszym po ponownym polaczeniu).
+ * onStatus("live", _, true) = polaczenie wrocilo po przerwie: transakcji z przerwy strumien nie powtorzy.
  */
 export function stream(symbols, { onBook, onTrade, onStatus }) {
   const lastBook = new Map();
   let delay = 1000;
-  let socket;
+  let socket, down = false;
 
   function open() {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${proto}://${location.host}/ws/market?symbols=${symbols.join(",")}`);
-    socket.onopen = () => { delay = 1000; onStatus("live"); };
+    socket.onopen = () => { delay = 1000; onStatus("live", undefined, down); down = false; };
     socket.onmessage = (e) => {
       const msg = JSON.parse(e.data);
       if (msg.type === "book") {
@@ -54,9 +55,11 @@ export function stream(symbols, { onBook, onTrade, onStatus }) {
       }
     };
     socket.onclose = (e) => {
+      down = true;
       onStatus("down", e.reason);
       // Serwer zamyka wolnego klienta (1008 too slow) -- po ponownym polaczeniu dostajemy swiezy obraz.
-      setTimeout(open, delay);
+      // Losowy dodatek: po restarcie serwera klienci nie wracaja wszyscy w tej samej milisekundzie.
+      setTimeout(open, delay * (0.75 + Math.random() / 2));
       delay = Math.min(delay * 2, 10000);
     };
   }

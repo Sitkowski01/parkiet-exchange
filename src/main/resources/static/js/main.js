@@ -8,7 +8,18 @@ import { fill, log, myPrices, renderOrders, ticket } from "./trading.js";
 const SPARK_SECONDS = 30, SPARK_COUNT = 60; // mini-wykresy: ostatnie 30 minut
 const $ = (id) => document.getElementById(id);
 
-const symbols = [...await api("/api/instruments")];
+// Bez listy spolek nie ma czego pokazac: gdy serwer nie odpowiada, mowimy o tym i probujemy dalej.
+async function instruments() {
+  for (let delay = 1000; ; delay = Math.min(delay * 2, 10000)) {
+    try { return [...await api("/api/instruments")]; } catch {
+      $("status").className = "status down";
+      $("status").querySelector(".status-text").textContent = "serwer nie odpowiada · ponawiam";
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
+const symbols = await instruments();
 const books = new Map();
 const recent = new Map(symbols.map((s) => [s, []]));
 let selected = symbols.includes(location.hash.slice(1)) ? location.hash.slice(1) : symbols[0];
@@ -81,12 +92,15 @@ document.querySelectorAll("[data-tab]").forEach((tab) => tab.addEventListener("c
 }));
 
 // Najpierw historia (mini-wykresy), potem strumien -- transakcje dopisuja sie do gotowych swiec.
-await Promise.all(symbols.map(async (s) => strip.series(s, await candles(s, SPARK_SECONDS, SPARK_COUNT).catch(() => []))));
+const loadSparks = () => Promise.all(symbols.map(async (s) => strip.series(s, await candles(s, SPARK_SECONDS, SPARK_COUNT).catch(() => []))));
+await loadSparks();
 renderOrders();
 select(selected);
 
 stream(symbols, {
-  onStatus(state, reason) {
+  onStatus(state, reason, reconnected) {
+    // Transakcje z czasu przerwy nie przyjda strumieniem -- swiece bierzemy od nowa z dziennika.
+    if (reconnected) { loadSparks().then(header); loadChart(); }
     $("status").className = `status ${state}`;
     $("status").querySelector(".status-text").textContent = state === "live" ? "na żywo" : `rozłączono${reason ? `: ${reason}` : ""} · ponawiam`;
   },
