@@ -19,11 +19,13 @@ export async function api(path, options = {}) {
 /** Swiece z dziennika zdarzen; ceny od razu w groszach. */
 export async function candles(symbol, seconds, count) {
   const list = await api(`/api/instruments/${symbol}/candles?seconds=${seconds}&count=${count}`);
-  return list.map((c) => ({
-    t: Date.parse(c.time), o: toGrosze(c.open), h: toGrosze(c.high), l: toGrosze(c.low),
-    c: toGrosze(c.close), v: c.volume,
-  }));
+  return list.map(candle);
 }
+
+export const candle = (c) => ({
+  t: Date.parse(c.time), o: toGrosze(c.open), h: toGrosze(c.high), l: toGrosze(c.low),
+  c: toGrosze(c.close), v: c.volume,
+});
 
 const level = (l) => ({ price: toGrosze(l.price), quantity: l.quantity, orders: l.orders });
 
@@ -32,6 +34,20 @@ const level = (l) => ({ price: toGrosze(l.price), quantity: l.quantity, orders: 
  * ostatnio widziany jest odrzucany (moze przyjsc po nowszym po ponownym polaczeniu).
  * onStatus("live", _, true) = polaczenie wrocilo po przerwie: transakcji z przerwy strumien nie powtorzy.
  */
+/** Wiadomosc strumienia -> onBook / onTrade. Wspolne dla gieldy i nagrania (replay.js). */
+export function dispatch(msg, lastBook, { onBook, onTrade }) {
+  if (msg.type === "book") {
+    if (msg.sequence < (lastBook.get(msg.symbol) ?? -1)) return;
+    lastBook.set(msg.symbol, msg.sequence);
+    onBook({ symbol: msg.symbol, sequence: msg.sequence, bids: msg.bids.map(level), asks: msg.asks.map(level) });
+  } else if (msg.type === "trade") {
+    onTrade({
+      symbol: msg.symbol, sequence: msg.sequence, t: Date.parse(msg.timestamp),
+      price: toGrosze(msg.price), quantity: msg.quantity, side: msg.takerSide, maker: msg.makerOrderId,
+    });
+  }
+}
+
 export function stream(symbols, { onBook, onTrade, onStatus }) {
   const lastBook = new Map();
   let delay = 1000;
@@ -41,19 +57,7 @@ export function stream(symbols, { onBook, onTrade, onStatus }) {
     const proto = location.protocol === "https:" ? "wss" : "ws";
     socket = new WebSocket(`${proto}://${location.host}/ws/market?symbols=${symbols.join(",")}`);
     socket.onopen = () => { delay = 1000; onStatus("live", undefined, down); down = false; };
-    socket.onmessage = (e) => {
-      const msg = JSON.parse(e.data);
-      if (msg.type === "book") {
-        if (msg.sequence < (lastBook.get(msg.symbol) ?? -1)) return;
-        lastBook.set(msg.symbol, msg.sequence);
-        onBook({ symbol: msg.symbol, sequence: msg.sequence, bids: msg.bids.map(level), asks: msg.asks.map(level) });
-      } else if (msg.type === "trade") {
-        onTrade({
-          symbol: msg.symbol, sequence: msg.sequence, t: Date.parse(msg.timestamp),
-          price: toGrosze(msg.price), quantity: msg.quantity, side: msg.takerSide, maker: msg.makerOrderId,
-        });
-      }
-    };
+    socket.onmessage = (e) => dispatch(JSON.parse(e.data), lastBook, { onBook, onTrade });
     socket.onclose = (e) => {
       down = true;
       onStatus("down", e.reason);
