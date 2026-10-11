@@ -259,6 +259,24 @@ prosto z `ProblemDetail` serwera.
 wątkowi, który kojarzy zlecenia, a po restarcie historia jest ta sama. To mały CQRS: zapis przez silnik,
 odczyt historii prosto z bazy.
 
+### Demo bez serwera
+
+Ten sam terminal da się wystawić jako zwykłe pliki, bez giełdy, bazy i Kafki — odtwarza wtedy nagranie
+prawdziwej sesji z botami. Zamiast REST-a i WebSocketu podstawia się [`js/replay.js`](src/main/resources/static/js/replay.js)
+z tym samym interfejsem (`api`, `candles`, `stream`), więc reszta terminala nie wie, że serwera nie ma:
+
+- czas nagrania przesuwa się na „teraz” o pełne minuty (świece zostają na swoich granicach), a nagranie
+  leci w pętli z ciągłą numeracją `sequence`;
+- zlecenia z formularza są symulowane w przeglądarce: PKC i limit biorą z najlepszych ofert odtwarzanego
+  arkusza, reszta limitu czeka, aż nagrana transakcja dojdzie do jej ceny.
+
+```bash
+./gradlew bootRun --args='--server.port=8090 --spring.profiles.active=demo'   # niech boty pohandlują ~20 min
+node scripts/demo/record.mjs http://localhost:8090 8      # 8 minut sesji -> build/demo/recording.json
+node scripts/demo/build.mjs                               # -> build/demo/site (statyczne pliki)
+node scripts/demo/serve.mjs                               # podgląd: http://localhost:8091
+```
+
 ## Metryki (Prometheus + Grafana)
 
 ```bash
@@ -323,7 +341,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
 | **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); restart na prawdziwej bazie ciągnie ten sam przebieg; dziura w numeracji i niespójny dziennik zatrzymują start |
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
-| **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza |
+| **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza, układ na laptopie i telefonie; osobno demo z nagrania (bez żadnego serwera, symulowane zlecenia) |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
 | **Mutacyjne (PIT)** | PIT psuje kod domeny, silnika, API, notowań i botów i sprawdza, czy testy to zauważą. Wynik: 346/371 (93%; ocalałe to głównie mutanty równoważne przy zamykaniu wątków i logowanie), próg 85% |
 
@@ -334,4 +352,5 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 # e2e: giełda bez botów, od pustego dziennika, potem Playwright (Chrome)
 ./gradlew bootRun --args='--server.port=8090 --exchange.journal.resume=false'
 cd e2e && npm install && npm test
+npm run test:replay   # demo z nagrania: bez giełdy, statyczna paczka i przewidywalne nagranie
 ```
