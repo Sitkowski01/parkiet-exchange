@@ -53,7 +53,7 @@ class OutboxRelayTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.execute("truncate engine_event, engine_run");
+        jdbc.execute("truncate engine_event, book_snapshot, engine_run");
         jdbc.update("update outbox_cursor set last_event_id = 0");
         journal = JdbcEventSink.startRun(jdbc, tx);
     }

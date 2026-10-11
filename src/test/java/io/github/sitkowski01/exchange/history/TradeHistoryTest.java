@@ -43,7 +43,7 @@ class TradeHistoryTest {
 
     @BeforeEach
     void setUp() {
-        jdbc.execute("truncate engine_event, engine_run");
+        jdbc.execute("truncate engine_event, book_snapshot, engine_run");
         history = new TradeHistory(jdbc);
     }
 
