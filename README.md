@@ -19,7 +19,7 @@ w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-be
 - **Kojarzenie jak na GPW** — najpierw cena, potem czas; ceny w groszach jako `long`. Każda spółka ma
   własny wątek silnika, więc arkusz nie potrzebuje blokad (model LMAX).
 - **Nic nie ginie** — każde zdarzenie trafia do dziennika w PostgreSQL (zapis poza wątkiem silnika, group
-  commit), stamtąd przez transactional outbox do Kafki. Po restarcie arkusz odtwarza się z dziennika
+  commit), stamtąd przez transactional outbox do Kafki. Po restarcie arkusz odtwarza się z migawki i dziennika
   (event sourcing), numeracja zleceń ciągnie się dalej.
 - **Na żywo** — notowania przez WebSocket, boty zakotwiczone w cenach z GPW, terminal w przeglądarce,
   metryki w Prometheus/Grafana.
@@ -240,8 +240,9 @@ Arkusz żyje w pamięci, ale nie ma osobnej tabeli „zlecenia w arkuszu”. Sta
 z dziennika — po restarcie giełda odtwarza go, zamiast go wczytywać:
 
 ```
-engine_event (ostatni run, spółka, sequence 1..n) ──► OrderBook.Rebuilder ──► arkusz + numer n
-                                                                         └─► silnik numeruje dalej od n+1
+book_snapshot (ostatni run, spółka, sequence k) ──┐
+engine_event  (ostatni run, spółka, k+1..n) ─────┴──► OrderBook.Rebuilder ──► arkusz + numer n
+                                                                          └─► silnik numeruje dalej od n+1
 ```
 
 - **Zdarzenia to fakty, nie polecenia.** Odtwarzanie nie kojarzy zleceń jeszcze raz, tylko nakłada
@@ -251,16 +252,25 @@ engine_event (ostatni run, spółka, sequence 1..n) ──► OrderBook.Rebuilde
   zlecenie złożone przed restartem, a odbiorca Kafki nie widzi żadnej zmiany.
 - **Niespójny dziennik = giełda nie wstaje.** Dziura w numeracji albo transakcja na nieznanym
   zleceniu zatrzymuje start. Lepiej nie handlować niż handlować na złym arkuszu.
-- **Strumieniowo.** Kursor po stronie bazy, zdarzenie po zdarzeniu — 200 tys. zdarzeń odtwarza się
-  w ok. 2 s i nie musi mieścić się w pamięci naraz.
-- **Uczciwie o granicy:** zapis jest asynchroniczny, więc po twardej awarii (kill -9) mogą przepaść
-  ostatnie milisekundy pracy, które klient zdążył zobaczyć jako przyjęte. Arkusz odtwarza się wtedy
-  spójnie do ostatniego zapisanego zdarzenia. Zwykłe zamknięcie zapisuje wszystko.
-  Numery zleceń, które przepadły w takiej awarii, dostaną po restarcie nowe zlecenia — klient trzymający
-  stary numer anulowałby cudze. Na produkcji: pula numerów rezerwowana w bazie z wyprzedzeniem.
-- **Bez migawek.** Każdy start odtwarza cały przebieg od pierwszego zdarzenia, więc czas startu rośnie
-  z długością pracy (boty w trybie demo dokładają zdarzenia bez przerwy). Następny krok: okresowa migawka arkusza
-  i odtwarzanie od niej.
+- **Migawki skracają start.** Co minutę (`exchange.journal.snapshot-interval`) każda spółka, która się
+  zmieniła, dostaje migawkę: zlecenia czekające w kolejności priorytetu i ostatnie id. Start bierze
+  najnowszą i dociąga tylko zdarzenia po niej. Migawka trafia do bazy dopiero wtedy, gdy dziennik ma już
+  wszystkie zdarzenia, które ona uwzględnia — inaczej po awarii zawierałaby zlecenia, których dziennik
+  (i Kafka) nigdy nie zobaczy. Dziennik zostaje jedynym źródłem prawdy, migawka to tylko skrót.
+
+  | Start po 1,14 mln zdarzeń (60 tys. zleceń w arkuszu) | Czas odtwarzania |
+  |---|---|
+  | cały dziennik | 6,9 s |
+  | migawka + zdarzenia po niej | 0,5 s |
+
+- **Strumieniowo.** Kursor po stronie bazy, zdarzenie po zdarzeniu — dziennik nie musi mieścić się
+  w pamięci naraz.
+- **Twarda awaria.** Zapis jest asynchroniczny, więc po kill -9 mogą przepaść ostatnie milisekundy pracy,
+  które klient zdążył zobaczyć jako przyjęte; arkusz odtwarza się spójnie do ostatniego zapisanego zdarzenia.
+  Klient mógł jednak dostać numer zlecenia, którego dziennik nie zapisał. Dlatego czyste zamknięcie (cały
+  dziennik zapisany) ustawia `engine_run.closed_at`, a start bez tego znacznika uznaje przebieg za urwany:
+  numeracja zleceń przeskakuje o milion i ten próg zostaje zapisany w bazie, więc stare numery nie wrócą
+  także po kolejnych restartach.
 
 Test różnicowy sprawdza, że arkusz odbudowany z 5000 losowych zdarzeń jest nieodróżnialny od oryginału —
 także w kolejnych 2000 zleceniach, czyli w priorytecie czasu, którego nie widać w samej głębokości.
@@ -363,7 +373,7 @@ skleja je w jeden wielowierszowy `INSERT`. Serwer nie zwrócił przy tym ani jed
 | Outboxa | kolejność i format wiadomości, awaria brokera w połowie paczki, brak potwierdzeń, wolny broker w limicie czasu, drugi relay nie wysyła równolegle |
 | Notowań | wolny klient rozłączany bez blokowania innych, pełna kolejka huba gubi paczkę zamiast zatrzymać silnik, obraz arkusza tylko dla spółek z widzami, limit klientów; plus prawdziwe gniazdo: obraz → transakcja → nowy obraz |
 | Botów | źródło cen na lokalnym serwerze HTTP (timeout, 404, inna waluta), animator bez handlu z samym sobą przy skoku ceny, późne odpowiedzi silnika nie zostawiają zleceń w arkuszu, gracz z zaplanowanym losowaniem, setki ticków na prawdziwym silniku |
-| **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); restart na prawdziwej bazie ciągnie ten sam przebieg; dziura w numeracji i niespójny dziennik zatrzymują start |
+| **Odtwarzania** | arkusz z dziennika nieodróżnialny od oryginału (5 ziaren × 5000 zdarzeń + 2000 dalszych zleceń); migawka z losowego miejsca + reszta dziennika = cały dziennik (4 ziarna); restart na prawdziwej bazie ciągnie ten sam przebieg, także od migawki; migawka nigdy nie wyprzedza dziennika; po awarii numery zleceń nie wracają, także po kolejnym czystym restarcie; dziura w numeracji i niespójny dziennik zatrzymują start |
 | Historii i metryk | świece OHLC z SQL-a (kolejność w obrębie milisekundy, granice przedziałów), liczniki obrotu w groszach, cały scrape `/actuator/prometheus` |
 | **E2E (Playwright)** | terminal w prawdziwej przeglądarce na działającej giełdzie: strumień notowań, taśma i arkusz po transakcji innego klienta, zlecenie z limitem i anulowanie, realizacja mojego zlecenia przez kogoś innego, PKC, walidacja formularza, układ na laptopie i telefonie; osobno demo z nagrania (bez żadnego serwera, symulowane zlecenia) |
 | Architektury | domena zależy tylko od JDK, silnik tylko od domeny i JDK (bez Springa i Micrometera), API nie zna bazy ani brokera |
