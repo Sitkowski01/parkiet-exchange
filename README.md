@@ -25,7 +25,7 @@ w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-be
   metryki w Prometheus/Grafana.
 - **Liczby** — silnik 2,5 mln zleceń/s (JMH, 6 spółek); cała droga HTTP → Postgres → Kafka
   ok. 1000 zleceń/s przy p95 8 ms (k6).
-- **Testy** — 260 automatycznych + 14 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
+- **Testy** — 303 automatyczne + 14 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
   współbieżności, Testcontainers, mutacyjne (PIT 93%), ArchUnit, Playwright.
 
 Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · OpenAPI · Micrometer · Prometheus · Grafana ·
