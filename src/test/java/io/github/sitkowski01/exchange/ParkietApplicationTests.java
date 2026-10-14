@@ -67,7 +67,8 @@ class ParkietApplicationTests {
 
         Number sellId = place("PZU", "{\"side\":\"SELL\",\"type\":\"LIMIT\",\"price\":\"250.40\",\"quantity\":10}");
         place("PZU", "{\"side\":\"BUY\",\"type\":\"MARKET\",\"quantity\":4}");
-        assertThat(mvc.delete().uri("/api/instruments/PZU/orders/{id}", sellId)).hasStatusOk();
+        // Przebieg z odpowiedzi to ten, pod ktorym dziennik (i Kafka) zapisuje zdarzenia.
+        assertThat(mvc.delete().uri("/api/instruments/PZU/orders/{id}?runId={run}", sellId, sink.runId())).hasStatusOk();
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() -> assertThat(jdbc.queryForList("""
                 select concat_ws(' ', sequence - ?, type, side, price, quantity, reason)
@@ -142,7 +143,9 @@ class ParkietApplicationTests {
         MvcTestResult result = mvc.post().uri("/api/instruments/{symbol}/orders", symbol)
                 .contentType(MediaType.APPLICATION_JSON).content(body).exchange();
         assertThat(result).hasStatus(HttpStatus.CREATED);
-        return JsonPath.read(result.getResponse().getContentAsString(), "$.orderId");
+        String json = result.getResponse().getContentAsString();
+        assertThat(JsonPath.<Number>read(json, "$.runId").longValue()).isEqualTo(sink.runId());
+        return JsonPath.read(json, "$.orderId");
     }
 
     /**

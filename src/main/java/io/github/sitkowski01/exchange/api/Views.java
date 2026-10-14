@@ -20,14 +20,15 @@ final class Views {
      * Bez {@code clientOrderId} i z {@code repeated = false} odpowiedz wyglada jak dawniej -- starzy klienci
      * nic nie zauwaza.
      *
+     * @param runId    przebieg gieldy: numer zlecenia jest unikalny tylko w nim (start bez wznowienia liczy od 1)
      * @param repeated {@code true}: zlecenie z tym {@code clientOrderId} juz bylo -- to jego pierwotny wynik,
      *                 arkusz sie nie zmienil
      */
-    record OrderView(long orderId, @JsonInclude(JsonInclude.Include.NON_NULL) String clientOrderId,
+    record OrderView(long orderId, long runId, @JsonInclude(JsonInclude.Include.NON_NULL) String clientOrderId,
                      @JsonInclude(JsonInclude.Include.NON_DEFAULT) boolean repeated, List<EventView> events) {
 
-        static OrderView of(OrderResult result, ClientOrderId clientOrderId) {
-            return new OrderView(result.orderId(), ClientOrderId.valueOrNull(clientOrderId),
+        static OrderView of(OrderResult result, long runId, ClientOrderId clientOrderId) {
+            return new OrderView(result.orderId(), runId, ClientOrderId.valueOrNull(clientOrderId),
                     result.repeated(), result.events().stream().map(EventView::of).toList());
         }
     }

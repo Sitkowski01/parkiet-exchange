@@ -20,7 +20,7 @@ class OrderControllerTest extends ApiTestBase {
         assertThat(place("CDR", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":\"101.25\",\"quantity\":10}"))
                 .hasStatus(HttpStatus.CREATED)
                 .bodyJson().isStrictlyEqualTo("""
-                        {"orderId": 1, "events": [
+                        {"orderId": 1, "runId": 7, "events": [
                           {"type": "RESTED", "orderId": 1, "side": "BUY", "price": "101.25", "quantity": 10}
                         ]}""");
     }
@@ -31,7 +31,7 @@ class OrderControllerTest extends ApiTestBase {
         assertThat(place("CDR", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":105.5,\"quantity\":8}"))
                 .hasStatus(HttpStatus.CREATED)
                 .bodyJson().isStrictlyEqualTo("""
-                        {"orderId": 2, "events": [
+                        {"orderId": 2, "runId": 7, "events": [
                           {"type": "TRADE", "makerOrderId": 1, "takerOrderId": 2, "takerSide": "BUY",
                            "price": "100.00", "quantity": 5},
                           {"type": "RESTED", "orderId": 2, "side": "BUY", "price": "105.50", "quantity": 3}
@@ -43,7 +43,7 @@ class OrderControllerTest extends ApiTestBase {
         assertThat(place("PKO", "{\"side\":\"SELL\",\"type\":\"MARKET\",\"quantity\":4}"))
                 .hasStatus(HttpStatus.CREATED)
                 .bodyJson().isStrictlyEqualTo("""
-                        {"orderId": 1, "events": [
+                        {"orderId": 1, "runId": 7, "events": [
                           {"type": "CANCELLED", "orderId": 1, "quantity": 4, "reason": "NO_LIQUIDITY"}
                         ]}""");
     }
@@ -74,5 +74,27 @@ class OrderControllerTest extends ApiTestBase {
         assertThat(mvc.delete().uri("/api/instruments/CDR/orders/1"))
                 .hasStatus(HttpStatus.NOT_FOUND)
                 .bodyJson().extractingPath("$.detail").isEqualTo("order 1 is not resting in the CDR book");
+    }
+
+    @Test
+    void cancelWithCurrentRunCancels() {
+        place("CDR", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":50,\"quantity\":10}");
+
+        assertThat(mvc.delete().uri("/api/instruments/CDR/orders/1?runId=7"))
+                .hasStatusOk()
+                .bodyJson().extractingPath("$.reason").isEqualTo("REQUESTED");
+    }
+
+    /** Po starcie od zera numer 1 ma nowe zlecenie -- prosba o anulowanie starego nie moze go zdjac. */
+    @Test
+    void cancelFromEarlierRunLeavesTheBookAlone() {
+        place("CDR", "{\"side\":\"BUY\",\"type\":\"LIMIT\",\"price\":50,\"quantity\":10}");
+
+        assertThat(mvc.delete().uri("/api/instruments/CDR/orders/1?runId=6"))
+                .hasStatus(HttpStatus.NOT_FOUND)
+                .bodyJson().extractingPath("$.detail")
+                .isEqualTo("order 1 of run 6 is not in the CDR book: the exchange is on run 7");
+        assertThat(mvc.get().uri("/api/instruments/CDR/book"))
+                .bodyJson().extractingPath("$.bids[0].quantity").isEqualTo(10);
     }
 }

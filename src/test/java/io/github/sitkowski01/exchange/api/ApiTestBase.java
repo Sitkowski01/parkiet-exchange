@@ -1,6 +1,7 @@
 package io.github.sitkowski01.exchange.api;
 
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
+import io.github.sitkowski01.exchange.config.ExchangeRun;
 import io.github.sitkowski01.exchange.engine.EngineEvent;
 import io.github.sitkowski01.exchange.engine.EventSink;
 import io.github.sitkowski01.exchange.engine.MatchingEngine;
@@ -74,6 +75,12 @@ abstract class ApiTestBase {
         @Bean
         ExchangeProperties exchangeProperties() {
             return new ExchangeProperties(List.of("CDR", "PKO"), 1, Duration.ofSeconds(2));
+        }
+
+        /** Przebieg inny niz 1, zeby test nie przeszedl przypadkiem na domyslnym numerze. */
+        @Bean
+        ExchangeRun exchangeRun() {
+            return new ExchangeRun(7);
         }
 
         @Bean
