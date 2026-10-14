@@ -25,7 +25,7 @@ w przeglądarce, bez serwera; zlecenia są symulowane ([jak to działa](#demo-be
   metryki w Prometheus/Grafana.
 - **Liczby** — silnik 2,5 mln zleceń/s (JMH, 6 spółek); cała droga HTTP → Postgres → Kafka
   ok. 1000 zleceń/s przy p95 8 ms (k6).
-- **Testy** — 303 automatyczne + 14 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
+- **Testy** — 306 automatycznych + 14 e2e: różnicowe względem naiwnej wyroczni (30 000 losowych zleceń),
   współbieżności, Testcontainers, mutacyjne (PIT 93%), ArchUnit, Playwright.
 
 Java 21 · Spring Boot 4 · PostgreSQL · Flyway · Kafka · WebSocket · OpenAPI · Micrometer · Prometheus · Grafana ·
@@ -105,14 +105,14 @@ curl localhost:8080/api/instruments
 
 curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
      -d '{"side":"SELL","type":"LIMIT","price":"250.40","quantity":10}'
-# {"orderId":1,"events":[{"type":"RESTED","orderId":1,"side":"SELL","price":"250.40","quantity":10}]}
+# {"orderId":1,"runId":3,"events":[{"type":"RESTED","orderId":1,"side":"SELL","price":"250.40","quantity":10}]}
 
 curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
      -d '{"side":"BUY","type":"MARKET","quantity":4}'
-# {"orderId":2,"events":[{"type":"TRADE","makerOrderId":1,"takerOrderId":2,"takerSide":"BUY","price":"250.40","quantity":4}]}
+# {"orderId":2,"runId":3,"events":[{"type":"TRADE","makerOrderId":1,"takerOrderId":2,"takerSide":"BUY","price":"250.40","quantity":4}]}
 
 curl localhost:8080/api/instruments/CDR/book?levels=5
-curl -X DELETE localhost:8080/api/instruments/CDR/orders/1
+curl -X DELETE "localhost:8080/api/instruments/CDR/orders/1?runId=3"   # runId opcjonalny
 ```
 
 | Kod | Kiedy |
@@ -120,7 +120,7 @@ curl -X DELETE localhost:8080/api/instruments/CDR/orders/1
 | 201 / 200 | zlecenie przyjęte / powtórka z tym samym `clientOrderId`, anulowane, arkusz |
 | 400 | zła treść: ułamek grosza, LIMIT bez ceny, MARKET z ceną, ilość 10.9, nieznany enum, zły `clientOrderId` |
 | 409 | `clientOrderId` już użyty dla innego zlecenia |
-| 404 | nieznana spółka albo zlecenia nie ma w arkuszu |
+| 404 | nieznana spółka albo zlecenia nie ma w arkuszu (także: anulowanie z `runId` innego przebiegu) |
 | 503 | kolejka spółki pełna — zlecenie **na pewno nie weszło**, można ponowić |
 | 504 | silnik nie odpowiedział na czas — stan **nieznany**; ponowić można tylko z tym samym `clientOrderId` |
 
@@ -131,9 +131,9 @@ Klient (np. dom maklerski) może nadać zleceniu własny identyfikator — odpow
 ```bash
 curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: application/json' \
      -d '{"side":"BUY","type":"LIMIT","price":"250.40","quantity":10,"clientOrderId":"broker-7f3a"}'
-# 201 {"orderId":3,"clientOrderId":"broker-7f3a","events":[...]}
+# 201 {"orderId":3,"runId":3,"clientOrderId":"broker-7f3a","events":[...]}
 # ta sama komenda jeszcze raz:
-# 200 {"orderId":3,"clientOrderId":"broker-7f3a","repeated":true,"events":[...]}   ← arkusz bez zmian
+# 200 {"orderId":3,"runId":3,"clientOrderId":"broker-7f3a","repeated":true,"events":[...]}   ← arkusz bez zmian
 ```
 
 - **Powtórka zwraca pierwotny wynik**, a nie drugie zlecenie: to samo `orderId`, te same zdarzenia, `repeated: true`.
@@ -143,6 +143,9 @@ curl -X POST localhost:8080/api/instruments/CDR/orders -H 'Content-Type: applica
 - **Przetrwa restart.** Identyfikator jest zapisany na zdarzeniach zlecenia w dzienniku; po restarcie silnik
   odbudowuje z niego pamięć powtórek (ostatnie 100 000 zleceń z identyfikatorem na spółkę). Parametrów
   zlecenia dziennik nie przechowuje, więc po restarcie sprawdzany jest już tylko sam identyfikator.
+- **`runId` w odpowiedzi.** Numer zlecenia jest unikalny tylko w przebiegu giełdy, a start bez wznowienia
+  liczy od 1. Klient zapisuje parę (`runId`, `orderId`) i anuluje z `?runId=`: prośba ze starego przebiegu
+  dostaje 404, zamiast zdjąć cudze zlecenie, które dostało ten sam numer. Ten sam `runId` niosą zdarzenia w Kafce.
 - **Tak trwałe jak samo zlecenie.** Po twardej awarii, która zgubiła ostatnie milisekundy dziennika, nie ma
   ani zlecenia (arkusz odtwarza się bez niego), ani jego identyfikatora — ponowienie składa je od nowa,
   zgodnie ze stanem giełdy.
