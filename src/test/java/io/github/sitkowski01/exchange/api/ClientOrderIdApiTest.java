@@ -17,7 +17,7 @@ class ClientOrderIdApiTest extends ApiTestBase {
         assertThat(place("CDR", ORDER))
                 .hasStatus(HttpStatus.CREATED)
                 .bodyJson().isStrictlyEqualTo("""
-                        {"orderId": 1, "clientOrderId": "broker-7f3a", "events": [
+                        {"orderId": 1, "runId": 7, "clientOrderId": "broker-7f3a", "events": [
                           {"type": "RESTED", "orderId": 1, "side": "BUY", "price": "101.25", "quantity": 10}
                         ]}""");
     }
@@ -29,7 +29,7 @@ class ClientOrderIdApiTest extends ApiTestBase {
         assertThat(place("CDR", ORDER))
                 .hasStatus(HttpStatus.OK)
                 .bodyJson().isStrictlyEqualTo("""
-                        {"orderId": 1, "clientOrderId": "broker-7f3a", "repeated": true, "events": [
+                        {"orderId": 1, "runId": 7, "clientOrderId": "broker-7f3a", "repeated": true, "events": [
                           {"type": "RESTED", "orderId": 1, "side": "BUY", "price": "101.25", "quantity": 10}
                         ]}""");
         assertThat(mvc.get().uri("/api/instruments/CDR/book")).bodyJson()

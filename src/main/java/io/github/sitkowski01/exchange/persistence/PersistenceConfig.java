@@ -2,6 +2,7 @@ package io.github.sitkowski01.exchange.persistence;
 
 import io.github.sitkowski01.exchange.config.EngineSink;
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
+import io.github.sitkowski01.exchange.config.ExchangeRun;
 import io.github.sitkowski01.exchange.config.StartingState;
 import io.github.sitkowski01.exchange.engine.AsyncEventSink;
 import io.github.sitkowski01.exchange.engine.MatchingEngine;
@@ -66,6 +67,12 @@ class PersistenceConfig {
         return start.resumedRun().isPresent()
                 ? JdbcEventSink.resumeRun(jdbc, tx, start.resumedRun().getAsLong())
                 : JdbcEventSink.startRun(jdbc, tx);
+    }
+
+    /** Przebieg, ktory widzi API: ten sam, pod ktorym dziennik zapisuje zdarzenia. */
+    @Bean
+    ExchangeRun exchangeRun(JdbcEventSink journal) {
+        return new ExchangeRun(journal.runId());
     }
 
     /** {@link EngineSink}: do silnika trafia ten odbiorca, a nie {@link JdbcEventSink} bezposrednio. */

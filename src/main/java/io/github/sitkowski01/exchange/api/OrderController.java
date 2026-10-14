@@ -3,6 +3,7 @@ package io.github.sitkowski01.exchange.api;
 import io.github.sitkowski01.exchange.api.Views.BookView;
 import io.github.sitkowski01.exchange.api.Views.OrderView;
 import io.github.sitkowski01.exchange.config.ExchangeProperties;
+import io.github.sitkowski01.exchange.config.ExchangeRun;
 import io.github.sitkowski01.exchange.engine.ClientOrderId;
 import io.github.sitkowski01.exchange.engine.InstrumentEngine;
 import io.github.sitkowski01.exchange.engine.MatchingEngine;
@@ -44,9 +45,11 @@ class OrderController {
 
     private final MatchingEngine engine;
     private final Duration timeout;
+    private final ExchangeRun run;
 
-    OrderController(MatchingEngine engine, ExchangeProperties properties) {
+    OrderController(MatchingEngine engine, ExchangeProperties properties, ExchangeRun run) {
         this.engine = engine;
+        this.run = run;
         this.timeout = properties.requestTimeout();
     }
 
@@ -60,7 +63,8 @@ class OrderController {
     @Operation(summary = "Złóż zlecenie",
             description = "Odpowiedź mówi, co dokładnie zrobił silnik: transakcje (TRADE), reszta w arkuszu "
                     + "(RESTED) albo reszta PKC bez ofert po drugiej stronie (CANCELLED). Z clientOrderId "
-                    + "ponowienie jest bezpieczne: zwraca pierwotny wynik zamiast drugiego zlecenia.")
+                    + "ponowienie jest bezpieczne: zwraca pierwotny wynik zamiast drugiego zlecenia. Numer zlecenia jest "
+                    + "unikalny w przebiegu (runId) -- start bez wznowienia zaczyna numeracje od 1.")
     @ApiResponse(responseCode = "201", description = "Zlecenie przyjęte i przetworzone")
     @ApiResponse(responseCode = "200", description = "Powtórka: zlecenie z tym clientOrderId już było -- jego pierwotny wynik")
     @ApiResponse(responseCode = "404", description = "Nieznana spółka",
@@ -81,13 +85,19 @@ class OrderController {
         OrderResult result = EngineCalls.await(
                 instrument.place(clientOrderId, request.side(), request.type(), price, request.quantity()), timeout);
         return ResponseEntity.status(result.repeated() ? HttpStatus.OK : HttpStatus.CREATED)
-                .body(OrderView.of(result, clientOrderId));
+                .body(OrderView.of(result, run.id(), clientOrderId));
     }
 
     @DeleteMapping("/{symbol}/orders/{orderId}")
     @Operation(summary = "Anuluj zlecenie czekające w arkuszu",
-            description = "404, gdy zlecenia już nie ma: zrealizowane, anulowane albo nieznane.")
-    EventView cancel(@Parameter(example = "CDR") @PathVariable String symbol, @PathVariable long orderId) {
+            description = "404, gdy zlecenia już nie ma: zrealizowane, anulowane albo nieznane. Z runId także, "
+                    + "gdy zlecenie jest z poprzedniego przebiegu -- ten numer może mieć teraz cudze zlecenie.")
+    EventView cancel(@Parameter(example = "CDR") @PathVariable String symbol, @PathVariable long orderId,
+                     @Parameter(description = "Przebieg z odpowiedzi na zlecenie") @RequestParam(required = false) Long runId) {
+        // Bez runId jak dawniej; z nim nie anulujemy cudzego zlecenia, ktore po starcie od zera dostalo ten numer.
+        if (runId != null && runId != run.id()) {
+            throw new OrderNotFoundException(symbol, orderId, runId, run.id());
+        }
         return EngineCalls.await(engine.instrument(symbol).cancel(orderId), timeout)
                 .map(EventView::of)
                 .orElseThrow(() -> new OrderNotFoundException(symbol, orderId));
